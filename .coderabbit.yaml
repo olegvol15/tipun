@@ -39,8 +39,9 @@ reviews:
         path where no tip is shown. Flag unused code and comments that only restate the code.
     - path: ".github/workflows/**"
       instructions: |
-        Check for least-privilege `permissions`, pinned action versions, and that CI still runs
-        fmt, clippy with -D warnings, build and tests on both Linux and macOS.
+        Check for least-privilege `permissions`, actions pinned to commit hashes, and that CI
+        still runs fmt and clippy with -D warnings (Linux only is enough: tipun has no
+        platform-specific code), plus build and tests on both Linux and macOS.
 
 knowledge_base:
   code_guidelines:
