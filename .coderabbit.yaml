@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+
+reviews:
+  profile: assertive
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!Cargo.lock"
+    - "!target/**"
+  path_instructions:
+    - path: "src/rules/**"
+      instructions: |
+        tipun's core promise is silence over a questionable suggestion. Treat any rewrite that
+        could change stdout, file side effects or exit status compared to the original command
+        as a blocking bug, unless it is listed as a documented exception on the rule.
+        Check that preconditions return None for unknown or long options, flags that take an
+        argument, multiple files, `-` and `--`, file names starting with `-`, and redirects on
+        the wrong pipeline stage. Watch for stdin-vs-file differences (filenames in output,
+        "(standard input)" labels) and BSD vs GNU behavior.
+        Every rule needs a precondition checklist in its doc comment and positive, negative,
+        edge-case and intentionally-silent tests.
+    - path: "src/lexer.rs"
+      instructions: &fail_closed |
+        The lexer and parser are fail-closed: anything outside the supported subset (plain
+        words, quotes without expansions, `|`, `>`, `>>`, `<`, `n>`, `n>&m`) must make the whole
+        command unsupported. Flag any input that could be accepted with a different meaning
+        than zsh gives it, and any possible panic on arbitrary input.
+    - path: "src/parser.rs"
+      instructions: *fail_closed
+    - path: "src/**/*.rs"
+      instructions: |
+        No `.unwrap()` outside tests. No new dependencies without a clear reason. tipun runs
+        before every shell prompt: flag filesystem access, subprocesses or heavy work on the
+        path where no tip is shown. Flag unused code and comments that only restate the code.
+    - path: ".github/workflows/**"
+      instructions: |
+        Check for least-privilege `permissions`, actions pinned to commit hashes, and that CI
+        still runs fmt and clippy with -D warnings (Linux only is enough: tipun has no
+        platform-specific code), plus build and tests on both Linux and macOS.
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "CLAUDE.md"
+
+chat:
+  auto_reply: true
