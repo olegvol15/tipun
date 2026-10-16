@@ -62,8 +62,8 @@ and any documented exception to the equivalence contract.
 **Footer:**
 - `BREAKING CHANGE: <what breaks>` when CLI flags, env vars, the state file format or the zsh
   integration change incompatibly. Also add `!` after the type: `feat(cli)!: ...`.
-- End every message with:
-  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
+- End the message with the co-author trailer your agent tool asks for (for example the
+  `Co-Authored-By:` line Claude Code provides). Do not invent one if the tool gives none.
 
 ## Examples
 
@@ -73,8 +73,6 @@ feat(lexer): tokenize words, quotes and pipes
 Words keep both the raw text and the unquoted value so suggestions
 can reuse the user's quoting. Anything outside the supported subset
 makes the whole command unsupported and tipun stays silent.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ```
 
 ```
@@ -82,12 +80,8 @@ fix(rules): keep grep-count silent when grep has -o
 
 `grep -o` prints one line per match, so `wc -l` counts matches while
 `grep -c` counts lines.
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ```
 
 ```
 chore(skills): add commit and pr-description skills
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ```

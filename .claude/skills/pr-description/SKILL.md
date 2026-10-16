@@ -57,7 +57,7 @@ most significant one.
 
 <Optional: follow-ups, known gaps, anything reviewers should look at closely.>
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+<attribution line your agent tool asks for, if any>
 ```
 
 ## Rules
@@ -66,4 +66,4 @@ most significant one.
 - State only what the diff shows. If tests were not run, say so; do not claim they pass.
 - Call out anything that affects users directly: CLI flags, env vars, the state file format, the
   zsh integration, new dependencies, startup time.
-- No emoji, except the attribution line above.
+- No emoji, except in an attribution line your agent tool requires.

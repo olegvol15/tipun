@@ -81,6 +81,9 @@ runtimes or network crates. Dev dependencies: none unless clearly needed.
   the build has no `never used` warnings.
 - Do not commit unless the user asks.
 - If `cargo` is not on `PATH` in the agent shell, use `~/.cargo/bin/cargo`.
+- This file is shared by all coding agents: `AGENTS.md` (Codex) is a symlink to it, and
+  `.agents/skills` is a symlink to `.claude/skills`. Edit the originals and keep the wording
+  tool-neutral.
 
 ## Code style
 
