@@ -71,7 +71,7 @@ jobs:
         run: |
           name="tipun-${VERSION}-${TARGET}"
           mkdir "$name"
-          cp "target/${TARGET}/release/tipun" README.md "$name/"
+          cp "target/${TARGET}/release/tipun" README.md LICENSE-MIT LICENSE-APACHE "$name/"
           tar -czf "${name}.tar.gz" "$name"
           shasum -a 256 "${name}.tar.gz" > "${name}.tar.gz.sha256"
           echo "ASSET=${name}" >> "$GITHUB_ENV"
