@@ -1,6 +1,6 @@
 ---
 name: walkthrough
-description: Walk through a tipun module or the whole pipeline step by step on a concrete input, showing the value at each stage. Use when the user wants to understand how some code works, especially code Claude wrote, or asks "how does the lexer/parser/rule handle X".
+description: Walk through a tipun module or the whole pipeline step by step on a concrete input, showing the value at each stage. Use when the user wants to understand how some code works, especially code an AI agent wrote, or asks "how does the lexer/parser/rule handle X".
 ---
 
 # Walkthrough
