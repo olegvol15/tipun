@@ -6,6 +6,9 @@ reviews:
   high_level_summary: true
   poem: false
   review_status: true
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
   auto_review:
     enabled: true
     drafts: false
@@ -36,7 +39,9 @@ reviews:
       instructions: |
         No `.unwrap()` outside tests. No new dependencies without a clear reason. tipun runs
         before every shell prompt: flag filesystem access, subprocesses or heavy work on the
-        path where no tip is shown. Flag unused code and comments that only restate the code.
+        path where no tip is shown. Flag unused code. Flag any comment that does not explain
+        unusual engineering (a workaround or a non-obvious trap), and do not ask for doc comments;
+        rule preconditions in `src/rules/**` are the only required ones.
     - path: ".github/workflows/**"
       instructions: |
         Check for least-privilege `permissions`, actions pinned to commit hashes, and that CI
