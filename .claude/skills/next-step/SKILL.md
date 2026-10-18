@@ -32,8 +32,8 @@ The user is new to Rust and wants to build tipun in small, understandable steps.
    - Everything added must be reachable from `main` or a test in this step, so the build has no
      `never used` warnings. If a piece cannot be used yet, wire it into an existing command
      (for example `suggest`) or postpone it.
-   - Follow `CLAUDE.md`: minimal comments, no unwrap outside tests, no new dependencies without
-     asking.
+   - Follow `CLAUDE.md`: no comments unless unusual engineering needs one, no unwrap outside
+     tests, no new dependencies without asking.
    - Add table-driven tests, including inputs that must be rejected.
 4. Run the `check` skill.
 5. Summarize what changed and explain any Rust concept the user may not know (ownership,

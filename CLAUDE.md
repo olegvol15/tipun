@@ -88,8 +88,9 @@ runtimes or network crates. Dev dependencies: none unless clearly needed.
 ## Code style
 
 - Follow rustfmt defaults (4 spaces, 100-column lines) and idiomatic Rust naming.
-- Keep comments minimal. No comments that restate the code. A short doc comment is welcome where
-  intent is not obvious, and every rule documents its preconditions.
+- The best comment is no comment: write code that explains itself. Add a comment only where some
+  unusual engineering was applied (a workaround, a non-obvious trap) that a reader could not work
+  out from the code. The one required exception: every rule documents its preconditions.
 - No emoji or emoji-like symbols, except in tests of multibyte input.
 - Prefer simple, explicit code over abstractions. No speculative generality.
 - Plain data structs (AST, state) may have public fields; no accessor boilerplate.

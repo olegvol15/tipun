@@ -33,8 +33,6 @@ pub enum LexError {
 
 type Chars<'a> = Peekable<CharIndices<'a>>;
 
-/// Splits a command into tokens. Anything outside the supported subset is an error, so the
-/// caller stays silent instead of guessing.
 pub fn lex(input: &str) -> Result<Vec<Token>, LexError> {
     if input.len() > MAX_LEN {
         return Err(LexError::TooLong);
