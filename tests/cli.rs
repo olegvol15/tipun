@@ -10,7 +10,7 @@ fn tipun(args: &[&str]) -> std::process::Output {
 
 #[test]
 fn suggest_is_silent_without_rules() {
-    for command in ["cat f | grep x", "echo $HOME", ""] {
+    for command in ["cat f | grep x", "echo $HOME", "", "FOO=1 cat f", "ls >"] {
         let output = tipun(&["suggest", command]);
         assert_eq!(output.status.code(), Some(1), "command: {command:?}");
         assert!(output.stdout.is_empty(), "command: {command:?}");

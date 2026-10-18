@@ -33,4 +33,5 @@ The user is new to Rust. Teach, don't lecture. Explain only; change code only if
 - Short. Use small code snippets taken from or modelled on the user's code.
 - Introduce at most two or three new concepts at once; offer to go deeper instead of front-loading.
 - No unrelated advice or refactors.
-- Do not add explanatory comments to the code itself; `CLAUDE.md` keeps comments minimal.
+- Do not add explanatory comments to the code itself; `CLAUDE.md` allows comments only for
+  unusual engineering.
