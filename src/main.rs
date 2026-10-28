@@ -1,5 +1,6 @@
 mod lexer;
 mod parser;
+mod render;
 
 use std::env;
 use std::process::ExitCode;
@@ -68,6 +69,7 @@ fn print_pipeline(pipeline: &Pipeline) {
             }
         }
     }
+    eprintln!("rendered {}", render::render(pipeline));
 }
 
 fn describe(word: &Word) -> String {
