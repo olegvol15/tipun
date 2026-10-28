@@ -38,8 +38,9 @@ produces byte-identical stdout, the same file side effects and exit 0. Only stde
 error-path behavior may differ, plus exceptions explicitly documented on a rule.
 
 Every rule MUST have:
-- a precondition checklist in its doc comment; anything unknown (unexpected flag, long option,
-  unusual redirect) returns `None`
+- preconditions checked in code: anything unknown (unexpected flag, long option, unusual
+  redirect) returns `None`. No precondition comment; the code and the silent-test table are the
+  checklist
 - positive, negative, edge-case and intentionally-silent unit tests
 - differential tests that run the original and the suggestion on fixtures and compare output
 
@@ -90,7 +91,7 @@ runtimes or network crates. Dev dependencies: none unless clearly needed.
 - Follow rustfmt defaults (4 spaces, 100-column lines) and idiomatic Rust naming.
 - The best comment is no comment: write code that explains itself. Add a comment only where some
   unusual engineering was applied (a workaround, a non-obvious trap) that a reader could not work
-  out from the code. The one required exception: every rule documents its preconditions.
+  out from the code.
 - No emoji or emoji-like symbols, except in tests of multibyte input.
 - Prefer simple, explicit code over abstractions. No speculative generality.
 - Plain data structs (AST, state) may have public fields; no accessor boilerplate.
