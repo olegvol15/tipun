@@ -1,6 +1,8 @@
+mod args;
 mod lexer;
 mod parser;
 mod render;
+mod rules;
 
 use std::env;
 use std::process::ExitCode;
@@ -41,12 +43,25 @@ fn suggest(command: &str) -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    match parser::parse(tokens) {
-        Ok(pipeline) if debug => print_pipeline(&pipeline),
-        Err(err) if debug => eprintln!("parse error: {err:?}"),
-        Ok(_) | Err(_) => {}
+    let pipeline = match parser::parse(tokens) {
+        Ok(pipeline) => pipeline,
+        Err(err) => {
+            if debug {
+                eprintln!("parse error: {err:?}");
+            }
+            return ExitCode::from(1);
+        }
+    };
+    if debug {
+        print_pipeline(&pipeline);
     }
-    ExitCode::from(1)
+    match rules::rewrite(&pipeline) {
+        Some(rewrite) => {
+            println!("{}", render::render(&rewrite));
+            ExitCode::SUCCESS
+        }
+        None => ExitCode::from(1),
+    }
 }
 
 fn print_pipeline(pipeline: &Pipeline) {
