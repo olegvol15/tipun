@@ -166,3 +166,74 @@ fn gnu_wc_pads_several_counts_differently_for_a_file() {
     );
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
+
+fn count(dir: &Path, command: &str) -> (String, Option<i32>) {
+    let output = sh(dir, command);
+    let stdout = String::from_utf8(output.stdout).expect("count is UTF-8");
+    (stdout.trim().to_string(), output.status.code())
+}
+
+#[test]
+fn grep_count_suggestions_match_the_original_count() {
+    let dir = fixtures("grep-count");
+    let originals = [
+        "grep ERROR app.log | wc -l",
+        "grep -i error app.log | wc -l",
+        "grep -v info app.log | wc -l",
+        "grep -w line 'my file.txt' | wc -l",
+        "grep -x a case.txt | wc -l",
+        "grep -E 'warn|info' app.log | wc -l",
+        "grep -F 'disk full' app.log | wc -l",
+        "grep -e warn -e ERROR app.log | wc -l",
+        "grep '' app.log | wc -l",
+        "sort app.log | grep info | wc -l",
+    ];
+    for original in originals {
+        let Some(suggestion) = suggest(original) else {
+            panic!("tipun must suggest a rewrite for {original:?}");
+        };
+        let expected = count(&dir, original);
+        assert_eq!(expected.1, Some(0), "original: {original:?}");
+        assert_eq!(
+            count(&dir, &suggestion),
+            expected,
+            "{original:?} vs {suggestion:?}"
+        );
+    }
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[test]
+fn grep_count_without_matches_differs_only_in_exit_status() {
+    let dir = fixtures("grep-count-no-match");
+    let original = "grep missing app.log | wc -l";
+    let suggestion = suggest(original).expect("tipun must suggest a rewrite");
+    assert_eq!(count(&dir, original), ("0".to_string(), Some(0)));
+    assert_eq!(count(&dir, &suggestion), ("0".to_string(), Some(1)));
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[test]
+fn grep_flags_that_change_what_is_printed_really_change_the_count() {
+    let dir = fixtures("grep-count-excluded");
+    let pairs = [
+        ("grep -o r app.log | wc -l", "grep -c -o r app.log"),
+        (
+            "grep -A 1 ERROR app.log | wc -l",
+            "grep -c -A 1 ERROR app.log",
+        ),
+        (
+            "grep ERROR app.log 'my file.txt' | wc -l",
+            "grep -c ERROR app.log 'my file.txt'",
+        ),
+    ];
+    for (original, rewrite) in pairs {
+        assert_eq!(suggest(original), None, "original: {original:?}");
+        assert_ne!(
+            count(&dir, original).0,
+            count(&dir, rewrite).0,
+            "original: {original:?}"
+        );
+    }
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
