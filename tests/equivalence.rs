@@ -170,7 +170,8 @@ fn gnu_wc_pads_several_counts_differently_for_a_file() {
 fn count(dir: &Path, command: &str) -> (String, Option<i32>) {
     let output = sh(dir, command);
     let stdout = String::from_utf8(output.stdout).expect("count is UTF-8");
-    (stdout.trim().to_string(), output.status.code())
+    let unpadded = stdout.trim_start_matches(' ');
+    (unpadded.to_string(), output.status.code())
 }
 
 #[test]
@@ -208,8 +209,8 @@ fn grep_count_without_matches_differs_only_in_exit_status() {
     let dir = fixtures("grep-count-no-match");
     let original = "grep missing app.log | wc -l";
     let suggestion = suggest(original).expect("tipun must suggest a rewrite");
-    assert_eq!(count(&dir, original), ("0".to_string(), Some(0)));
-    assert_eq!(count(&dir, &suggestion), ("0".to_string(), Some(1)));
+    assert_eq!(count(&dir, original), ("0\n".to_string(), Some(0)));
+    assert_eq!(count(&dir, &suggestion), ("0\n".to_string(), Some(1)));
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
 

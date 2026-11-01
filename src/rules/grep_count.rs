@@ -9,15 +9,14 @@ const GREP: Spec = Spec {
 
 // Documented exceptions to the equivalence contract: with no matching lines `grep -c` exits 1,
 // while the pipeline exits 0 with `wc`; and BSD `wc -l` pads the count with leading spaces.
+// Only the end of a pipeline is rewritten, so the padding never reaches another command.
 pub fn check(pipeline: &Pipeline) -> Option<Pipeline> {
-    for (i, pair) in pipeline.stages.windows(2).enumerate() {
-        if let Some(merged) = merge(&pair[0], &pair[1]) {
-            let mut stages = pipeline.stages.clone();
-            stages.splice(i..i + 2, [merged]);
-            return Some(Pipeline { stages });
-        }
-    }
-    None
+    let [rest @ .., grep, wc] = pipeline.stages.as_slice() else {
+        return None;
+    };
+    let mut stages = rest.to_vec();
+    stages.push(merge(grep, wc)?);
+    Some(Pipeline { stages })
 }
 
 fn merge(grep: &Command, wc: &Command) -> Option<Command> {
@@ -78,7 +77,6 @@ mod tests {
             ("grep '' f | wc -l", "grep -c '' f"),
             ("cat f | grep x | wc -l", "cat f | grep -c x"),
             ("sort f | grep x | wc -l", "sort f | grep -c x"),
-            ("grep x f | wc -l | tr -d ' '", "grep -c x f | tr -d ' '"),
         ];
         for (input, expected) in cases {
             assert_eq!(
@@ -113,6 +111,9 @@ mod tests {
             "grep x f -i | wc -l",
             "grep --count x f | wc -l",
             "grep x f | sudo wc -l",
+            "grep x f | wc -l | tr -d ' '",
+            "grep x f | wc -l | cut -c1",
+            "grep x f | wc -l | sort",
         ];
         for input in cases {
             assert_eq!(rewrite(input), None, "input: {input:?}");
@@ -143,7 +144,7 @@ mod tests {
 
     #[test]
     fn suggestion_parses_again_and_is_not_rewritten_twice() {
-        let inputs = ["grep x f | wc -l", "cat f | grep -e x | wc -l | sort"];
+        let inputs = ["grep x f | wc -l", "cat f | grep -e x | wc -l"];
         for input in inputs {
             let suggestion = check(&parse_str(input)).expect("input must be rewritten");
             assert_eq!(
