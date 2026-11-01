@@ -53,6 +53,11 @@ pub fn check(pipeline: &Pipeline) -> Option<Pipeline> {
     if file.value.is_empty() || file.value.starts_with('-') {
         return None;
     }
+    // Entries like /proc/self/status describe whichever process opens them, so moving the read
+    // from `cat` to the next command changes their content.
+    if file.value.starts_with("/proc/") || file.value.starts_with("/dev/") {
+        return None;
+    }
     let mut command = next.clone();
     match input {
         FileInput::Operand => command.args.push(file.clone()),
@@ -172,6 +177,11 @@ mod tests {
             "cat -- f | grep x",
             "cat '' | grep x",
             "cat '-f' | grep x",
+            "cat /proc/self/status | grep Vm",
+            "cat /proc/meminfo | grep MemTotal",
+            "cat '/proc/self/comm' | tr a-z A-Z",
+            "cat /dev/stdin | wc -l",
+            "cat /dev/fd/0 | sort",
             "cat f | grep x > out",
             "cat f | grep x | sort > out",
             "cat f | grep x < g",
