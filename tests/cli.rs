@@ -1,9 +1,18 @@
-use std::process::Command;
+use std::process::{Command, Output};
 
-fn tipun(args: &[&str]) -> std::process::Output {
+type Vars<'a> = &'a [(&'a str, &'a str)];
+
+fn tipun(args: &[&str]) -> Output {
+    tipun_with_env(args, &[])
+}
+
+fn tipun_with_env(args: &[&str], vars: Vars) -> Output {
     Command::new(env!("CARGO_BIN_EXE_tipun"))
         .args(args)
         .env_remove("TIPUN_DEBUG")
+        .env_remove("TIPUN_DISABLE")
+        .env_remove("CI")
+        .envs(vars.iter().copied())
         .output()
         .expect("failed to run tipun")
 }
@@ -23,5 +32,59 @@ fn suggest_is_silent_without_a_rewrite() {
         assert_eq!(output.status.code(), Some(1), "command: {command:?}");
         assert!(output.stdout.is_empty(), "command: {command:?}");
         assert!(output.stderr.is_empty(), "command: {command:?}");
+    }
+}
+
+#[test]
+fn analyze_prints_the_tip_on_stderr() {
+    let cases: [&[&str]; 3] = [
+        &["analyze", "--command", "cat app.log | grep ERROR"],
+        &[
+            "analyze",
+            "--command",
+            "cat app.log | grep ERROR",
+            "--exit-code",
+            "0",
+        ],
+        &["analyze", "--command=cat app.log | grep ERROR"],
+    ];
+    for args in cases {
+        let output = tipun(args);
+        assert_eq!(output.status.code(), Some(0), "args: {args:?}");
+        assert!(output.stdout.is_empty(), "args: {args:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            "tipun tip: grep ERROR app.log\n  grep can read the file itself, no need for cat.\n",
+            "args: {args:?}"
+        );
+    }
+}
+
+#[test]
+fn analyze_is_silent_and_exits_zero() {
+    let command = "cat app.log | grep ERROR";
+    let cases: [(&[&str], Vars); 9] = [
+        (&["analyze", "--command", "ls | grep x"], &[]),
+        (&["analyze", "--command", "echo $HOME"], &[]),
+        (&["analyze", "--command", ""], &[]),
+        (&["analyze", "--command", "-rf"], &[]),
+        (&["analyze", "--command", command, "--exit-code", "1"], &[]),
+        (&["analyze", "--command", command], &[("CI", "true")]),
+        (
+            &["analyze", "--command", command],
+            &[("TIPUN_DISABLE", "1")],
+        ),
+        (&["analyze"], &[]),
+        (&["analyze", "--command", command, "--exit-code", "x"], &[]),
+    ];
+    for (args, vars) in cases {
+        let output = tipun_with_env(args, vars);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "args: {args:?} env: {vars:?}"
+        );
+        assert!(output.stdout.is_empty(), "args: {args:?} env: {vars:?}");
+        assert!(output.stderr.is_empty(), "args: {args:?} env: {vars:?}");
     }
 }

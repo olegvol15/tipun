@@ -11,6 +11,7 @@ use clap::{Parser, Subcommand};
 
 use lexer::{Redirect, Word};
 use parser::Pipeline;
+use rules::Rewrite;
 
 #[derive(Parser)]
 #[command(name = "tipun", version)]
@@ -21,47 +22,85 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    Suggest { command: String },
+    Suggest {
+        command: String,
+    },
+    Analyze {
+        #[arg(long, allow_hyphen_values = true)]
+        command: String,
+        #[arg(long, default_value_t = 0)]
+        exit_code: i32,
+    },
 }
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(err) if env::args().nth(1).as_deref() == Some("analyze") => {
+            if debug() {
+                eprintln!("{err}");
+            }
+            return ExitCode::SUCCESS;
+        }
+        Err(err) => err.exit(),
+    };
 
     match cli.command {
         Command::Suggest { command } => suggest(&command),
+        Command::Analyze { command, exit_code } => {
+            analyze(&command, exit_code);
+            ExitCode::SUCCESS
+        }
     }
 }
 
 fn suggest(command: &str) -> ExitCode {
-    let debug = env::var_os("TIPUN_DEBUG").is_some_and(|v| v == "1");
+    match find_rewrite(command) {
+        Some(rewrite) => {
+            println!("{}", render::render(&rewrite.pipeline));
+            ExitCode::SUCCESS
+        }
+        None => ExitCode::from(1),
+    }
+}
+
+fn analyze(command: &str, exit_code: i32) {
+    if exit_code != 0 || env::var_os("CI").is_some() || env::var_os("TIPUN_DISABLE").is_some() {
+        return;
+    }
+    if let Some(rewrite) = find_rewrite(command) {
+        eprintln!("tipun tip: {}", render::render(&rewrite.pipeline));
+        eprintln!("  {}", rewrite.explanation);
+    }
+}
+
+fn find_rewrite(command: &str) -> Option<Rewrite> {
     let tokens = match lexer::lex(command) {
         Ok(tokens) => tokens,
         Err(err) => {
-            if debug {
+            if debug() {
                 eprintln!("lex error: {err:?}");
             }
-            return ExitCode::from(1);
+            return None;
         }
     };
     let pipeline = match parser::parse(tokens) {
         Ok(pipeline) => pipeline,
         Err(err) => {
-            if debug {
+            if debug() {
                 eprintln!("parse error: {err:?}");
             }
-            return ExitCode::from(1);
+            return None;
         }
     };
-    if debug {
+    if debug() {
         print_pipeline(&pipeline);
     }
-    match rules::rewrite(&pipeline) {
-        Some(rewrite) => {
-            println!("{}", render::render(&rewrite));
-            ExitCode::SUCCESS
-        }
-        None => ExitCode::from(1),
-    }
+    rules::rewrite(&pipeline)
+}
+
+fn debug() -> bool {
+    env::var_os("TIPUN_DEBUG").is_some_and(|v| v == "1")
 }
 
 fn print_pipeline(pipeline: &Pipeline) {

@@ -1,18 +1,22 @@
 use crate::args::{self, Spec};
 use crate::lexer::Word;
 use crate::parser::{Command, Pipeline};
+use crate::rules::Rewrite;
 
 const SORT: Spec = Spec {
     flags: "ru",
     with_value: "",
 };
 
-pub fn check(pipeline: &Pipeline) -> Option<Pipeline> {
+pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
     for (i, pair) in pipeline.stages.windows(2).enumerate() {
         if let Some(merged) = merge(&pair[0], &pair[1]) {
             let mut stages = pipeline.stages.clone();
             stages.splice(i..i + 2, [merged]);
-            return Some(Pipeline { stages });
+            return Some(Rewrite {
+                pipeline: Pipeline { stages },
+                explanation: "sort -u drops duplicate lines itself, no need for uniq.".to_string(),
+            });
         }
     }
     None
@@ -49,7 +53,7 @@ mod tests {
     }
 
     fn rewrite(input: &str) -> Option<String> {
-        check(&parse_str(input)).map(|pipeline| render(&pipeline))
+        check(&parse_str(input)).map(|rewrite| render(&rewrite.pipeline))
     }
 
     #[test]
@@ -128,10 +132,21 @@ mod tests {
     }
 
     #[test]
+    fn explains_the_rewrite() {
+        let rewrite = check(&parse_str("sort f | uniq")).expect("input must be rewritten");
+        assert_eq!(
+            rewrite.explanation,
+            "sort -u drops duplicate lines itself, no need for uniq."
+        );
+    }
+
+    #[test]
     fn suggestion_parses_again_and_is_not_rewritten_twice() {
         let inputs = ["sort f | uniq", "sort -r 'my file' | uniq | head -n 3"];
         for input in inputs {
-            let suggestion = check(&parse_str(input)).expect("input must be rewritten");
+            let suggestion = check(&parse_str(input))
+                .expect("input must be rewritten")
+                .pipeline;
             assert_eq!(
                 parse_str(&render(&suggestion)),
                 suggestion,

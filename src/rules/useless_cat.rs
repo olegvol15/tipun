@@ -1,6 +1,7 @@
 use crate::args::{self, Spec};
 use crate::lexer::Redirect;
 use crate::parser::{Command, Pipeline, Redirection};
+use crate::rules::Rewrite;
 
 const GREP: Spec = Spec {
     flags: "cinoqsvwxEF",
@@ -32,7 +33,7 @@ enum FileInput {
     Redirect,
 }
 
-pub fn check(pipeline: &Pipeline) -> Option<Pipeline> {
+pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
     let [cat, next, rest @ ..] = pipeline.stages.as_slice() else {
         return None;
     };
@@ -53,17 +54,27 @@ pub fn check(pipeline: &Pipeline) -> Option<Pipeline> {
     if file.value.is_empty() || file.value.starts_with('-') || is_process_dependent(&file.value) {
         return None;
     }
+    let name = &next.name.value;
     let mut command = next.clone();
-    match input {
-        FileInput::Operand => command.args.push(file.clone()),
-        FileInput::Redirect => command.redirects.push(Redirection {
-            op: Redirect::In,
-            target: Some(file.clone()),
-        }),
-    }
+    let explanation = match input {
+        FileInput::Operand => {
+            command.args.push(file.clone());
+            format!("{name} can read the file itself, no need for cat.")
+        }
+        FileInput::Redirect => {
+            command.redirects.push(Redirection {
+                op: Redirect::In,
+                target: Some(file.clone()),
+            });
+            format!("{name} can read the file through <, no need for cat.")
+        }
+    };
     let mut stages = vec![command];
     stages.extend_from_slice(rest);
-    Some(Pipeline { stages })
+    Some(Rewrite {
+        pipeline: Pipeline { stages },
+        explanation,
+    })
 }
 
 // Entries like /proc/self/status describe whichever process opens them, so moving the read from
@@ -119,7 +130,7 @@ mod tests {
     }
 
     fn rewrite(input: &str) -> Option<String> {
-        check(&parse_str(input)).map(|pipeline| render(&pipeline))
+        check(&parse_str(input)).map(|rewrite| render(&rewrite.pipeline))
     }
 
     #[test]
@@ -264,6 +275,24 @@ mod tests {
     }
 
     #[test]
+    fn explains_how_the_file_is_passed() {
+        let cases = [
+            (
+                "cat f | grep x",
+                "grep can read the file itself, no need for cat.",
+            ),
+            (
+                "cat f | wc -l",
+                "wc can read the file through <, no need for cat.",
+            ),
+        ];
+        for (input, expected) in cases {
+            let rewrite = check(&parse_str(input)).expect("input must be rewritten");
+            assert_eq!(rewrite.explanation, expected, "input: {input:?}");
+        }
+    }
+
+    #[test]
     fn suggestion_parses_again_and_is_not_rewritten_twice() {
         let inputs = [
             "cat app.log | grep ERROR",
@@ -273,7 +302,9 @@ mod tests {
             "cat 'my file' | tr a b | sort",
         ];
         for input in inputs {
-            let suggestion = check(&parse_str(input)).expect("input must be rewritten");
+            let suggestion = check(&parse_str(input))
+                .expect("input must be rewritten")
+                .pipeline;
             assert_eq!(
                 parse_str(&render(&suggestion)),
                 suggestion,

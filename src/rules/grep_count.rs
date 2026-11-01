@@ -1,6 +1,7 @@
 use crate::args::{self, Spec};
 use crate::lexer::Word;
 use crate::parser::{Command, Pipeline};
+use crate::rules::Rewrite;
 
 const GREP: Spec = Spec {
     flags: "ivwxEFs",
@@ -10,13 +11,16 @@ const GREP: Spec = Spec {
 // Documented exceptions to the equivalence contract: with no matching lines `grep -c` exits 1,
 // while the pipeline exits 0 with `wc`; and BSD `wc -l` pads the count with leading spaces.
 // Only the end of a pipeline is rewritten, so the padding never reaches another command.
-pub fn check(pipeline: &Pipeline) -> Option<Pipeline> {
+pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
     let [rest @ .., grep, wc] = pipeline.stages.as_slice() else {
         return None;
     };
     let mut stages = rest.to_vec();
     stages.push(merge(grep, wc)?);
-    Some(Pipeline { stages })
+    Some(Rewrite {
+        pipeline: Pipeline { stages },
+        explanation: "grep -c counts matching lines itself, no need for wc -l.".to_string(),
+    })
 }
 
 fn merge(grep: &Command, wc: &Command) -> Option<Command> {
@@ -56,7 +60,7 @@ mod tests {
     }
 
     fn rewrite(input: &str) -> Option<String> {
-        check(&parse_str(input)).map(|pipeline| render(&pipeline))
+        check(&parse_str(input)).map(|rewrite| render(&rewrite.pipeline))
     }
 
     #[test]
@@ -143,10 +147,21 @@ mod tests {
     }
 
     #[test]
+    fn explains_the_rewrite() {
+        let rewrite = check(&parse_str("grep x f | wc -l")).expect("input must be rewritten");
+        assert_eq!(
+            rewrite.explanation,
+            "grep -c counts matching lines itself, no need for wc -l."
+        );
+    }
+
+    #[test]
     fn suggestion_parses_again_and_is_not_rewritten_twice() {
         let inputs = ["grep x f | wc -l", "cat f | grep -e x | wc -l"];
         for input in inputs {
-            let suggestion = check(&parse_str(input)).expect("input must be rewritten");
+            let suggestion = check(&parse_str(input))
+                .expect("input must be rewritten")
+                .pipeline;
             assert_eq!(
                 parse_str(&render(&suggestion)),
                 suggestion,
