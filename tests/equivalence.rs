@@ -14,12 +14,45 @@ info started
 
 const SPACED: &str = "b line\na line\nb line\n";
 
+const MIXED_CASE: &str = "b\nA\na\nB\na\n";
+
+const NUMBERS: &str = "1\n01\n2\n1\n";
+
 fn fixtures(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("tipun-{name}-{}", std::process::id()));
     fs::create_dir_all(&dir).expect("create fixture dir");
     fs::write(dir.join("app.log"), APP_LOG).expect("write app.log");
     fs::write(dir.join("my file.txt"), SPACED).expect("write my file.txt");
+    fs::write(dir.join("case.txt"), MIXED_CASE).expect("write case.txt");
+    fs::write(dir.join("numbers.txt"), NUMBERS).expect("write numbers.txt");
     dir
+}
+
+fn assert_same_output(dir: &Path, originals: &[&str]) {
+    for original in originals {
+        let Some(suggestion) = suggest(original) else {
+            panic!("tipun must suggest a rewrite for {original:?}");
+        };
+        let expected = sh(dir, original);
+        let actual = sh(dir, &suggestion);
+        assert_eq!(expected.status.code(), Some(0), "original: {original:?}");
+        assert_eq!(actual.status.code(), Some(0), "suggestion: {suggestion:?}");
+        assert_eq!(
+            actual.stdout, expected.stdout,
+            "{original:?} vs {suggestion:?}"
+        );
+    }
+}
+
+fn assert_excluded_and_different(dir: &Path, pairs: &[(&str, &str)]) {
+    for (original, rewrite) in pairs {
+        assert_eq!(suggest(original), None, "original: {original:?}");
+        assert_ne!(
+            sh(dir, original).stdout,
+            sh(dir, rewrite).stdout,
+            "original: {original:?}"
+        );
+    }
 }
 
 fn sh(dir: &Path, command: &str) -> Output {
@@ -79,19 +112,7 @@ fn useless_cat_suggestions_match_the_original() {
         "cat app.log | tr -cd 'a-z\\n'",
         "cat app.log | tr ' ' '\\n' | sort | uniq -c",
     ];
-    for original in originals {
-        let Some(suggestion) = suggest(original) else {
-            panic!("tipun must suggest a rewrite for {original:?}");
-        };
-        let expected = sh(&dir, original);
-        let actual = sh(&dir, &suggestion);
-        assert_eq!(expected.status.code(), Some(0), "original: {original:?}");
-        assert_eq!(actual.status.code(), Some(0), "suggestion: {suggestion:?}");
-        assert_eq!(
-            actual.stdout, expected.stdout,
-            "{original:?} vs {suggestion:?}"
-        );
-    }
+    assert_same_output(&dir, &originals);
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
 
@@ -102,14 +123,35 @@ fn excluded_flags_really_change_the_output() {
         ("cat app.log | grep -H ERROR", "grep -H ERROR app.log"),
         ("cat app.log | grep -l ERROR", "grep -l ERROR app.log"),
     ];
-    for (original, rewrite) in pairs {
-        assert_eq!(suggest(original), None, "original: {original:?}");
-        assert_ne!(
-            sh(&dir, original).stdout,
-            sh(&dir, rewrite).stdout,
-            "original: {original:?}"
-        );
-    }
+    assert_excluded_and_different(&dir, &pairs);
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[test]
+fn sort_uniq_suggestions_match_the_original() {
+    let dir = fixtures("sort-uniq");
+    let originals = [
+        "sort app.log | uniq",
+        "sort -r app.log | uniq",
+        "sort -u app.log | uniq",
+        "sort app.log 'my file.txt' | uniq",
+        "sort case.txt | uniq",
+        "sort numbers.txt | uniq",
+        "grep -v info app.log | sort | uniq",
+        "tr ' ' '\\n' < app.log | sort | uniq | wc -l",
+    ];
+    assert_same_output(&dir, &originals);
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[test]
+fn sort_flags_that_change_equality_really_change_the_output() {
+    let dir = fixtures("sort-uniq-excluded");
+    let pairs = [
+        ("sort -f case.txt | uniq", "sort -u -f case.txt"),
+        ("sort -n numbers.txt | uniq", "sort -u -n numbers.txt"),
+    ];
+    assert_excluded_and_different(&dir, &pairs);
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
 
