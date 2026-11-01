@@ -37,7 +37,8 @@ Also check that the suggestion parses again and that the rule returns `None` on 
 ## 3. Implement
 
 - One file in `src/rules/`, one plain function `fn check(pipeline: &Pipeline) -> Option<Rewrite>`.
-- A doc comment on the function listing the preconditions as a checklist.
+- No precondition comment: each precondition is an early `return None` in the code, and each one
+  has a silent test.
 - Command knowledge (allowed flags) lives in the rule file. Reuse the shared argument helper if it
   exists; do not add a global capability table.
 - Build the new pipeline from the original words' `raw` text so quoting is preserved; only

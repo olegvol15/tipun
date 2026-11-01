@@ -25,8 +25,8 @@ reviews:
         argument, multiple files, `-` and `--`, file names starting with `-`, and redirects on
         the wrong pipeline stage. Watch for stdin-vs-file differences (filenames in output,
         "(standard input)" labels) and BSD vs GNU behavior.
-        Every rule needs a precondition checklist in its doc comment and positive, negative,
-        edge-case and intentionally-silent tests.
+        Every rule needs positive, negative, edge-case and intentionally-silent tests. Rules have
+        no precondition comment: the code and the silent tests document the preconditions.
     - path: "src/lexer.rs"
       instructions: &fail_closed |
         The lexer and parser are fail-closed: anything outside the supported subset (plain
@@ -40,8 +40,8 @@ reviews:
         No `.unwrap()` outside tests. No new dependencies without a clear reason. tipun runs
         before every shell prompt: flag filesystem access, subprocesses or heavy work on the
         path where no tip is shown. Flag unused code. Flag any comment that does not explain
-        unusual engineering (a workaround or a non-obvious trap), and do not ask for doc comments;
-        rule preconditions in `src/rules/**` are the only required ones.
+        unusual engineering (a workaround or a non-obvious trap), and do not ask for doc comments,
+        including on rules.
     - path: ".github/workflows/**"
       instructions: |
         Check for least-privilege `permissions`, actions pinned to commit hashes, and that CI

@@ -10,9 +10,9 @@ Assume the rule is wrong and try to prove it. A single wrong suggestion breaks t
 
 ## Steps
 
-1. Read the rule file in `src/rules/`, its doc-comment precondition checklist, its tests, and the
-   shared helpers it uses (argument parsing, rendering). If there are no rules yet, say so and
-   stop.
+1. Read the rule file in `src/rules/`, its preconditions (the early `return None` checks), its
+   tests, and the shared helpers it uses (argument parsing, rendering). If there are no rules yet,
+   say so and stop.
 2. List the rule's claim: "for inputs matching P, rewrite O into S".
 3. Attack it. For each category, try to build an input that passes the preconditions but where O
    and S differ in stdout, file side effects or exit status:
