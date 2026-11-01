@@ -35,7 +35,8 @@ zsh adapter (thin: captures raw command, alias-expanded command, exit code)
 
 Equivalence contract: if the original exits 0 on regular, readable text files, the suggestion
 produces byte-identical stdout, the same file side effects and exit 0. Only stderr wording and
-error-path behavior may differ, plus exceptions explicitly documented on a rule.
+error-path behavior may differ, plus exceptions explicitly documented on a rule. File side effects
+are files created, written, truncated or deleted; access times are not part of the contract.
 
 Every rule MUST have:
 - preconditions checked in code: anything unknown (unexpected flag, long option, unusual

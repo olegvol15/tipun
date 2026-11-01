@@ -1,5 +1,6 @@
 use crate::args::{self, Spec};
-use crate::parser::{Command, Pipeline};
+use crate::lexer::Redirect;
+use crate::parser::{Command, Pipeline, Redirection};
 
 const GREP: Spec = Spec {
     flags: "cinoqsvwxEF",
@@ -17,14 +18,28 @@ const UNIQ: Spec = Spec {
     flags: "cdiu",
     with_value: "fs",
 };
+const WC: Spec = Spec {
+    flags: "lwcm",
+    with_value: "",
+};
+const TR: Spec = Spec {
+    flags: "cds",
+    with_value: "",
+};
+
+enum FileInput {
+    Operand,
+    Redirect,
+}
 
 pub fn check(pipeline: &Pipeline) -> Option<Pipeline> {
     let [cat, next, rest @ ..] = pipeline.stages.as_slice() else {
         return None;
     };
-    if cat.name.value != "cat" || !reads_only_stdin(next) {
+    if cat.name.value != "cat" {
         return None;
     }
+    let input = file_input(next)?;
     if pipeline
         .stages
         .iter()
@@ -35,30 +50,61 @@ pub fn check(pipeline: &Pipeline) -> Option<Pipeline> {
     let [file] = cat.args.as_slice() else {
         return None;
     };
-    if file.value.is_empty() || file.value.starts_with('-') {
+    if file.value.is_empty() || file.value.starts_with('-') || is_process_dependent(&file.value) {
         return None;
     }
     let mut command = next.clone();
-    command.args.push(file.clone());
+    match input {
+        FileInput::Operand => command.args.push(file.clone()),
+        FileInput::Redirect => command.redirects.push(Redirection {
+            op: Redirect::In,
+            target: Some(file.clone()),
+        }),
+    }
     let mut stages = vec![command];
     stages.extend_from_slice(rest);
     Some(Pipeline { stages })
 }
 
-fn reads_only_stdin(command: &Command) -> bool {
+// Entries like /proc/self/status describe whichever process opens them, so moving the read from
+// `cat` to the next command changes their content. `..` is rejected rather than collapsed,
+// because collapsing it is only correct without symlinks.
+fn is_process_dependent(path: &str) -> bool {
+    let Some(rest) = path.strip_prefix('/') else {
+        return false;
+    };
+    let parts: Vec<&str> = rest
+        .split('/')
+        .filter(|part| !part.is_empty() && *part != ".")
+        .collect();
+    matches!(parts.first(), Some(&("proc" | "dev"))) || parts.contains(&"..")
+}
+
+fn file_input(command: &Command) -> Option<FileInput> {
     let name = command.name.value.as_str();
     let spec = match name {
         "grep" => &GREP,
         "head" | "tail" => &HEAD_TAIL,
         "sort" => &SORT,
         "uniq" => &UNIQ,
-        _ => return false,
+        "wc" => &WC,
+        "tr" => &TR,
+        _ => return None,
     };
-    let Some(args) = args::split(&command.args, spec) else {
-        return false;
+    let args = args::split(&command.args, spec)?;
+    let operands = args.operands.len();
+    let fits = match name {
+        "grep" => operands == usize::from(!args.flags.contains(&'e')),
+        // GNU wc pads several counts to a width taken from the file size, but not for a pipe.
+        "wc" => operands == 0 && args.flags.len() == 1,
+        "tr" => (1..=2).contains(&operands),
+        _ => operands == 0,
     };
-    let pattern_operands = usize::from(name == "grep" && !args.flags.contains(&'e'));
-    args.operands.len() == pattern_operands
+    let input = match name {
+        "wc" | "tr" => FileInput::Redirect,
+        _ => FileInput::Operand,
+    };
+    fits.then_some(input)
 }
 
 #[cfg(test)]
@@ -106,6 +152,20 @@ mod tests {
                 "grep x f | sort | head -n 3",
             ),
             ("'cat' f | grep x", "grep x f"),
+            ("cat /var/log/app.log | grep x", "grep x /var/log/app.log"),
+            ("cat /proceeds.txt | grep x", "grep x /proceeds.txt"),
+            ("cat ../app.log | grep x", "grep x ../app.log"),
+            ("cat app.log | wc -l", "wc -l < app.log"),
+            ("cat f | wc -w", "wc -w < f"),
+            ("cat f | wc -c", "wc -c < f"),
+            ("cat f | wc -m", "wc -m < f"),
+            ("cat 'my file' | wc -l", "wc -l < 'my file'"),
+            ("cat f | tr a-z A-Z", "tr a-z A-Z < f"),
+            ("cat f | tr -d '\\r'", "tr -d '\\r' < f"),
+            ("cat f | tr -s ' '", "tr -s ' ' < f"),
+            ("cat f | tr -cd a-z", "tr -cd a-z < f"),
+            ("cat f | tr a b | sort", "tr a b < f | sort"),
+            ("cat f | grep x | wc -l", "grep x f | wc -l"),
         ];
         for (input, expected) in cases {
             assert_eq!(
@@ -129,6 +189,16 @@ mod tests {
             "cat -- f | grep x",
             "cat '' | grep x",
             "cat '-f' | grep x",
+            "cat /proc/self/status | grep Vm",
+            "cat /proc/meminfo | grep MemTotal",
+            "cat '/proc/self/comm' | tr a-z A-Z",
+            "cat /dev/stdin | wc -l",
+            "cat /dev/fd/0 | sort",
+            "cat //proc/self/status | grep Vm",
+            "cat /./proc/self/status | grep Vm",
+            "cat /.//dev/stdin | wc -l",
+            "cat /proc | grep x",
+            "cat /tmp/../proc/self/status | grep Vm",
             "cat f | grep x > out",
             "cat f | grep x | sort > out",
             "cat f | grep x < g",
@@ -136,8 +206,12 @@ mod tests {
             "cat f > g | grep x",
             "cat < f | grep x",
             "cat f | grep x 2>/dev/null",
-            "cat f | wc -l",
-            "cat f | tr a b",
+            "cat f | wc -l g",
+            "cat f | wc -l > out",
+            "cat f | wc -l x -w",
+            "cat f | tr",
+            "cat f | tr a b c",
+            "cat f | tr a b < g",
             "cat f | cat",
             "cat f | sudo grep x",
             "cat f | grep",
@@ -178,6 +252,11 @@ mod tests {
             "cat f | sort -c",
             "cat f | sort -m",
             "cat f | uniq -D",
+            "cat f | wc",
+            "cat f | wc -lw",
+            "cat f | wc -l -w",
+            "cat f | wc -L",
+            "cat f | tr -t ab x",
         ];
         for input in cases {
             assert_eq!(rewrite(input), None, "input: {input:?}");
@@ -190,6 +269,8 @@ mod tests {
             "cat app.log | grep ERROR",
             "cat 'my file' | sort -t , -k 2 | uniq -c",
             "cat f | grep -e -x",
+            "cat f | wc -l",
+            "cat 'my file' | tr a b | sort",
         ];
         for input in inputs {
             let suggestion = check(&parse_str(input)).expect("input must be rewritten");
