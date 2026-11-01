@@ -67,9 +67,22 @@ fn useless_cat_suggestions_match_the_original() {
         "cat app.log | uniq -c",
         "cat app.log | uniq -i -f 1",
         "cat app.log | grep warn | sort | head -n 1",
+        "cat app.log | wc -l",
+        "cat app.log | wc -w",
+        "cat app.log | wc -c",
+        "cat app.log | wc -m",
+        "cat 'my file.txt' | wc -l",
+        "cat app.log | grep ERROR | wc -l",
+        "cat app.log | tr a-z A-Z",
+        "cat app.log | tr -d 0-9",
+        "cat app.log | tr -s ' '",
+        "cat app.log | tr -cd 'a-z\\n'",
+        "cat app.log | tr ' ' '\\n' | sort | uniq -c",
     ];
     for original in originals {
-        let suggestion = suggest(original).expect("tipun must suggest a rewrite");
+        let Some(suggestion) = suggest(original) else {
+            panic!("tipun must suggest a rewrite for {original:?}");
+        };
         let expected = sh(&dir, original);
         let actual = sh(&dir, &suggestion);
         assert_eq!(expected.status.code(), Some(0), "original: {original:?}");
@@ -97,5 +110,17 @@ fn excluded_flags_really_change_the_output() {
             "original: {original:?}"
         );
     }
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn gnu_wc_pads_several_counts_differently_for_a_file() {
+    let dir = fixtures("wc-padding");
+    assert_eq!(suggest("cat app.log | wc"), None);
+    assert_ne!(
+        sh(&dir, "cat app.log | wc").stdout,
+        sh(&dir, "wc < app.log").stdout
+    );
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
