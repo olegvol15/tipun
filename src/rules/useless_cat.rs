@@ -50,12 +50,7 @@ pub fn check(pipeline: &Pipeline) -> Option<Pipeline> {
     let [file] = cat.args.as_slice() else {
         return None;
     };
-    if file.value.is_empty() || file.value.starts_with('-') {
-        return None;
-    }
-    // Entries like /proc/self/status describe whichever process opens them, so moving the read
-    // from `cat` to the next command changes their content.
-    if file.value.starts_with("/proc/") || file.value.starts_with("/dev/") {
+    if file.value.is_empty() || file.value.starts_with('-') || is_process_dependent(&file.value) {
         return None;
     }
     let mut command = next.clone();
@@ -69,6 +64,20 @@ pub fn check(pipeline: &Pipeline) -> Option<Pipeline> {
     let mut stages = vec![command];
     stages.extend_from_slice(rest);
     Some(Pipeline { stages })
+}
+
+// Entries like /proc/self/status describe whichever process opens them, so moving the read from
+// `cat` to the next command changes their content. `..` is rejected rather than collapsed,
+// because collapsing it is only correct without symlinks.
+fn is_process_dependent(path: &str) -> bool {
+    let Some(rest) = path.strip_prefix('/') else {
+        return false;
+    };
+    let parts: Vec<&str> = rest
+        .split('/')
+        .filter(|part| !part.is_empty() && *part != ".")
+        .collect();
+    matches!(parts.first(), Some(&("proc" | "dev"))) || parts.contains(&"..")
 }
 
 fn file_input(command: &Command) -> Option<FileInput> {
@@ -143,6 +152,9 @@ mod tests {
                 "grep x f | sort | head -n 3",
             ),
             ("'cat' f | grep x", "grep x f"),
+            ("cat /var/log/app.log | grep x", "grep x /var/log/app.log"),
+            ("cat /proceeds.txt | grep x", "grep x /proceeds.txt"),
+            ("cat ../app.log | grep x", "grep x ../app.log"),
             ("cat app.log | wc -l", "wc -l < app.log"),
             ("cat f | wc -w", "wc -w < f"),
             ("cat f | wc -c", "wc -c < f"),
@@ -182,6 +194,11 @@ mod tests {
             "cat '/proc/self/comm' | tr a-z A-Z",
             "cat /dev/stdin | wc -l",
             "cat /dev/fd/0 | sort",
+            "cat //proc/self/status | grep Vm",
+            "cat /./proc/self/status | grep Vm",
+            "cat /.//dev/stdin | wc -l",
+            "cat /proc | grep x",
+            "cat /tmp/../proc/self/status | grep Vm",
             "cat f | grep x > out",
             "cat f | grep x | sort > out",
             "cat f | grep x < g",
