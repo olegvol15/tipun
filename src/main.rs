@@ -4,6 +4,7 @@ mod lexer;
 mod parser;
 mod render;
 mod rules;
+mod update;
 
 use std::env;
 use std::process::ExitCode;
@@ -36,6 +37,10 @@ enum Command {
     },
     Init {
         shell: Shell,
+    },
+    Update {
+        #[arg(long)]
+        quiet: bool,
     },
 }
 
@@ -72,7 +77,35 @@ fn main() -> ExitCode {
             }
             ExitCode::SUCCESS
         }
+        Command::Update { quiet } => update(quiet),
     }
+}
+
+fn update(quiet: bool) -> ExitCode {
+    let message = match update::run(quiet) {
+        Ok(update::Outcome::UpToDate) => {
+            format!("tipun {} is up to date", env!("CARGO_PKG_VERSION"))
+        }
+        Ok(update::Outcome::Updated(tag)) => format!("tipun updated to {tag}"),
+        Err(update::UpdateError::NotInstalledByScript) => {
+            if !quiet {
+                eprintln!(
+                    "tipun was not installed by install.sh; update it the way you installed it"
+                );
+            }
+            return ExitCode::from(1);
+        }
+        Err(err) => {
+            if !quiet {
+                eprintln!("tipun update failed: {err}");
+            }
+            return ExitCode::from(1);
+        }
+    };
+    if !quiet {
+        println!("{message}");
+    }
+    ExitCode::SUCCESS
 }
 
 fn suggest(command: &str) -> ExitCode {
@@ -86,7 +119,15 @@ fn suggest(command: &str) -> ExitCode {
 }
 
 fn analyze(command: &str, expanded: Option<&str>, exit_code: i32) {
-    if exit_code != 0 || env::var_os("CI").is_some() || env::var_os("TIPUN_DISABLE").is_some() {
+    if env::var_os("CI").is_some() || env::var_os("TIPUN_DISABLE").is_some() {
+        return;
+    }
+    if let Err(err) = update::in_background()
+        && debug()
+    {
+        eprintln!("update check failed: {err}");
+    }
+    if exit_code != 0 {
         return;
     }
     let Some(rewrite) = find_rewrite(command) else {

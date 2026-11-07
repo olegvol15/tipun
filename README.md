@@ -12,7 +12,8 @@ tipun tip: grep ERROR app.log
 
 ## Principles
 
-- **Local and private.** No AI, no network, no telemetry. Nothing leaves your machine.
+- **No AI.** Suggestions come from hand-written rules, not from a model, and your commands never
+  leave your machine.
 - **Deterministic.** Suggestions come from parsing the command, not from guessing.
 - **Silent when unsure.** tipun only suggests a rewrite when it is confident the behavior is the
   same. A missed tip is fine; a wrong one is not.
@@ -73,6 +74,13 @@ commands, when `CI` is set, and when aliases change the command (for example `al
 Aliases that only add `--color=auto` or `--exclude-dir=...` to `grep`, like the one oh-my-zsh
 defines, are fine.
 Set `TIPUN_DISABLE=1` to turn it off, or `TIPUN_DEBUG=1` to see why it stayed silent.
+
+## Updates
+
+A copy installed with the install script updates itself. Once a day tipun checks GitHub for a
+newer release in the background and installs it; the next prompt shows `tipun updated to vX.Y.Z`.
+Run `tipun update` to update right away, or set `TIPUN_NO_UPDATE=1` to turn this off. Copies
+installed with `cargo install` are not touched; update those with cargo.
 
 To try a command without the hook:
 
