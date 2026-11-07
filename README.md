@@ -32,7 +32,17 @@ Early development, zsh only. tipun knows a small set of rewrites:
 
 ## Install
 
-Download the archive for your platform from the
+On macOS or Linux:
+
+```
+curl -fsSL https://raw.githubusercontent.com/olegvol15/tipun/main/install.sh | sh
+```
+
+The script downloads the binary for your platform from the latest release, checks its SHA-256
+checksum and installs it to `~/.local/bin`. Set `TIPUN_INSTALL_DIR` to install elsewhere, or
+`TIPUN_VERSION` (for example `v0.1.0`) to pick a release.
+
+To install by hand instead, download the archive for your platform from the
 [latest release](https://github.com/olegvol15/tipun/releases/latest): macOS (`aarch64-apple-darwin`,
 `x86_64-apple-darwin`) or Linux (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`).
 For example, on an Apple Silicon Mac:
