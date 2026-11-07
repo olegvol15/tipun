@@ -51,3 +51,21 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zsh
       - run: cargo build --locked
       - run: cargo test --locked
+
+  install-script:
+    name: Install script (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: runner.os == 'Linux'
+        run: shellcheck -s sh install.sh
+      - run: sh install.sh
+        env:
+          TIPUN_INSTALL_DIR: ${{ runner.temp }}/bin
+      - run: '"$RUNNER_TEMP/bin/tipun" suggest "sort f | uniq"'
