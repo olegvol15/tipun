@@ -30,14 +30,32 @@ Early development, zsh only. tipun knows a small set of rewrites:
 | `sort file \| uniq` | `sort -u file` |
 | `grep x file \| wc -l` | `grep -c x file` |
 
-## Usage
+## Install
 
-Install from a checkout and add the hook to `~/.zshrc`:
+Download the archive for your platform from the
+[latest release](https://github.com/olegvol15/tipun/releases/latest): macOS (`aarch64-apple-darwin`,
+`x86_64-apple-darwin`) or Linux (`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`).
+For example, on an Apple Silicon Mac:
 
 ```
-cargo install --path .
+curl -LO https://github.com/olegvol15/tipun/releases/download/v0.1.0/tipun-0.1.0-aarch64-apple-darwin.tar.gz
+shasum -a 256 tipun-0.1.0-aarch64-apple-darwin.tar.gz
+tar -xzf tipun-0.1.0-aarch64-apple-darwin.tar.gz
+mkdir -p ~/.local/bin
+mv tipun-0.1.0-aarch64-apple-darwin/tipun ~/.local/bin/
+```
+
+Compare the checksum with the `.sha256` file next to the archive, and make sure `~/.local/bin` is
+on your `PATH`. With a Rust toolchain you can instead build from a checkout:
+`cargo install --path .`.
+
+Then add the hook to `~/.zshrc`:
+
+```
 echo 'eval "$(tipun init zsh)"' >> ~/.zshrc
 ```
+
+## Usage
 
 Open a new shell and type, for example, `sort file | uniq`. tipun stays silent after failed
 commands, when `CI` is set, and when aliases change the command (for example `alias cat=bat`).
