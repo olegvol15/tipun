@@ -12,11 +12,6 @@ pub fn matches_typed(typed: &str, expanded: &str) -> bool {
         })
 }
 
-// zsh reports the expanded command with its words separated by spaces, so splitting on spaces
-// finds options added by an alias such as oh-my-zsh's `grep --color=auto --exclude-dir={...}`
-// without lexing the brace expansion. Quoted text is never alias-expanded, so a quoted chunk
-// that happens to look like an option is identical in the typed command, and dropping it can
-// only make the comparison fail.
 fn drop_harmless_grep_options(expanded: &str) -> String {
     let mut kept: Vec<&str> = Vec::new();
     let mut at_command = true;
