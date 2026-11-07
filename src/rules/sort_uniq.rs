@@ -11,6 +11,9 @@ const SORT: Spec = Spec {
 pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
     for (i, pair) in pipeline.stages.windows(2).enumerate() {
         if let Some(merged) = merge(&pair[0], &pair[1]) {
+            if !super::only_harmless_redirects(pipeline) {
+                return None;
+            }
             let mut stages = pipeline.stages.clone();
             stages.splice(i..i + 2, [merged]);
             return Some(Rewrite {
@@ -26,11 +29,12 @@ fn merge(sort: &Command, uniq: &Command) -> Option<Command> {
     if sort.name.value != "sort" || uniq.name.value != "uniq" || !uniq.args.is_empty() {
         return None;
     }
-    if !sort.redirects.is_empty() || !uniq.redirects.is_empty() {
+    if !sort.redirects.is_empty() || super::reads_redirected_input(uniq) {
         return None;
     }
     let args = args::split(&sort.args, &SORT)?;
     let mut merged = sort.clone();
+    merged.redirects = uniq.redirects.clone();
     if !args.flags.contains(&'u') {
         let unique = Word {
             raw: "-u".to_string(),
@@ -73,6 +77,16 @@ mod tests {
                 "grep x f | sort -u | wc -l",
             ),
             ("sort f | uniq | sort | uniq", "sort -u f | sort | uniq"),
+            ("sort f | uniq > out", "sort -u f > out"),
+            ("sort f | uniq >> out 2>&1", "sort -u f >> out 2>&1"),
+            ("sort f | uniq 2>/dev/null", "sort -u f 2> /dev/null"),
+            ("sort f | uniq | head > out", "sort -u f | head > out"),
+            ("grep x f > out | sort | uniq", "grep x f > out | sort -u"),
+            ("tr a b < f | sort | uniq", "tr a b < f | sort -u"),
+            (
+                "tr a b < f | sort | uniq > out",
+                "tr a b < f | sort -u > out",
+            ),
         ];
         for (input, expected) in cases {
             assert_eq!(
@@ -94,7 +108,14 @@ mod tests {
             "sort f | uniq in",
             "sort f | uniq in out",
             "sort f > out | uniq",
-            "sort f | uniq > out",
+            "sort f | uniq > f",
+            "sort dir/f | uniq >> f",
+            "sort f | uniq | head > f",
+            "sort f | uniq < g",
+            "sort f | uniq > out < g",
+            "tr a b < f | sort | uniq > f",
+            "sort f | uniq > /dev/stdout",
+            "sort f | uniq 2>&0",
             "sort f 2>/dev/null | uniq",
             "sort < f | uniq",
             "sort -- f | uniq",
@@ -142,7 +163,11 @@ mod tests {
 
     #[test]
     fn suggestion_parses_again_and_is_not_rewritten_twice() {
-        let inputs = ["sort f | uniq", "sort -r 'my file' | uniq | head -n 3"];
+        let inputs = [
+            "sort f | uniq",
+            "sort -r 'my file' | uniq | head -n 3",
+            "sort f | uniq > out 2>&1",
+        ];
         for input in inputs {
             let suggestion = check(&parse_str(input))
                 .expect("input must be rewritten")

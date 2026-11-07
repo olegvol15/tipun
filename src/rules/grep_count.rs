@@ -1,6 +1,6 @@
 use crate::args::{self, Spec};
-use crate::lexer::Word;
-use crate::parser::{Command, Pipeline};
+use crate::lexer::{Redirect, Word};
+use crate::parser::{Command, Pipeline, Redirection};
 use crate::rules::Rewrite;
 
 const GREP: Spec = Spec {
@@ -10,13 +10,18 @@ const GREP: Spec = Spec {
 
 // Documented exceptions to the equivalence contract: with no matching lines `grep -c` exits 1,
 // while the pipeline exits 0 with `wc`; and BSD `wc -l` pads the count with leading spaces.
-// Only the end of a pipeline is rewritten, so the padding never reaches another command.
+// Only the end of a pipeline is rewritten and its stdout is never redirected, so the padding
+// never reaches another command or a file.
 pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
     let [rest @ .., grep, wc] = pipeline.stages.as_slice() else {
         return None;
     };
+    let merged = merge(grep, wc)?;
+    if !super::only_harmless_redirects(pipeline) {
+        return None;
+    }
     let mut stages = rest.to_vec();
-    stages.push(merge(grep, wc)?);
+    stages.push(merged);
     Some(Rewrite {
         pipeline: Pipeline { stages },
         explanation: "grep -c counts matching lines itself, no need for wc -l.".to_string(),
@@ -30,7 +35,10 @@ fn merge(grep: &Command, wc: &Command) -> Option<Command> {
     if !matches!(wc.args.as_slice(), [flag] if flag.value == "-l") {
         return None;
     }
-    if !grep.redirects.is_empty() || !wc.redirects.is_empty() {
+    if !grep.redirects.is_empty()
+        || super::reads_redirected_input(wc)
+        || wc.redirects.iter().any(writes_stdout)
+    {
         return None;
     }
     let args = args::split(&grep.args, &GREP)?;
@@ -40,12 +48,21 @@ fn merge(grep: &Command, wc: &Command) -> Option<Command> {
         return None;
     }
     let mut merged = grep.clone();
+    merged.redirects = wc.redirects.clone();
     let count = Word {
         raw: "-c".to_string(),
         value: "-c".to_string(),
     };
     merged.args.insert(0, count);
     Some(merged)
+}
+
+fn writes_stdout(redirect: &Redirection) -> bool {
+    match redirect.op {
+        Redirect::Out { fd } | Redirect::Append { fd } => matches!(fd, None | Some(1)),
+        Redirect::Dup { fd, .. } => fd == 1,
+        Redirect::In => false,
+    }
 }
 
 #[cfg(test)]
@@ -81,6 +98,14 @@ mod tests {
             ("grep '' f | wc -l", "grep -c '' f"),
             ("cat f | grep x | wc -l", "cat f | grep -c x"),
             ("sort f | grep x | wc -l", "sort f | grep -c x"),
+            ("grep x f | wc -l 2> err", "grep -c x f 2> err"),
+            ("grep x f | wc -l 2>&1", "grep -c x f 2>&1"),
+            ("grep x f | wc -l 2>/dev/null", "grep -c x f 2> /dev/null"),
+            (
+                "sort f > sorted | grep x | wc -l",
+                "sort f > sorted | grep -c x",
+            ),
+            ("tr a b < f | grep x | wc -l", "tr a b < f | grep -c x"),
         ];
         for (input, expected) in cases {
             assert_eq!(
@@ -107,7 +132,18 @@ mod tests {
             "grep -e x f g | wc -l",
             "grep | wc -l",
             "grep x f > out | wc -l",
-            "grep x f | wc -l > out",
+            "grep x f | wc -l > f",
+            "grep x dir/f | wc -l >> f",
+            "cat f | grep x | wc -l > f",
+            "grep x f | wc -l < g",
+            "grep x f | wc -l > count",
+            "grep x f | wc -l >> count",
+            "grep x f | wc -l 1> count",
+            "grep x f | wc -l 2> err > count",
+            "grep x f | wc -l 1>&2",
+            "tr a b < f | grep x | wc -l > f",
+            "grep x f | wc -l 0> out",
+            "grep x f | wc -l > /dev/stdout",
             "grep x < f | wc -l",
             "grep x f 2>/dev/null | wc -l",
             "grep -- x f | wc -l",
@@ -157,7 +193,11 @@ mod tests {
 
     #[test]
     fn suggestion_parses_again_and_is_not_rewritten_twice() {
-        let inputs = ["grep x f | wc -l", "cat f | grep -e x | wc -l"];
+        let inputs = [
+            "grep x f | wc -l",
+            "cat f | grep -e x | wc -l",
+            "grep x f | wc -l 2> err",
+        ];
         for input in inputs {
             let suggestion = check(&parse_str(input))
                 .expect("input must be rewritten")

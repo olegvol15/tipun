@@ -41,17 +41,19 @@ pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
         return None;
     }
     let input = file_input(next)?;
-    if pipeline
-        .stages
-        .iter()
-        .any(|stage| !stage.redirects.is_empty())
+    if !cat.redirects.is_empty()
+        || super::reads_redirected_input(next)
+        || !super::only_harmless_redirects(pipeline)
     {
         return None;
     }
     let [file] = cat.args.as_slice() else {
         return None;
     };
-    if file.value.is_empty() || file.value.starts_with('-') || is_process_dependent(&file.value) {
+    if file.value.is_empty()
+        || file.value.starts_with('-')
+        || super::is_process_dependent(&file.value)
+    {
         return None;
     }
     let name = &next.name.value;
@@ -75,20 +77,6 @@ pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
         pipeline: Pipeline { stages },
         explanation,
     })
-}
-
-// Entries like /proc/self/status describe whichever process opens them, so moving the read from
-// `cat` to the next command changes their content. `..` is rejected rather than collapsed,
-// because collapsing it is only correct without symlinks.
-fn is_process_dependent(path: &str) -> bool {
-    let Some(rest) = path.strip_prefix('/') else {
-        return false;
-    };
-    let parts: Vec<&str> = rest
-        .split('/')
-        .filter(|part| !part.is_empty() && *part != ".")
-        .collect();
-    matches!(parts.first(), Some(&("proc" | "dev"))) || parts.contains(&"..")
 }
 
 fn file_input(command: &Command) -> Option<FileInput> {
@@ -177,6 +165,16 @@ mod tests {
             ("cat f | tr -cd a-z", "tr -cd a-z < f"),
             ("cat f | tr a b | sort", "tr a b < f | sort"),
             ("cat f | grep x | wc -l", "grep x f | wc -l"),
+            ("cat f | grep x > out", "grep x f > out"),
+            ("cat f | grep x >> out", "grep x f >> out"),
+            ("cat f | grep x 2>/dev/null", "grep x f 2> /dev/null"),
+            ("cat f | grep x > out 2>&1", "grep x f > out 2>&1"),
+            ("cat f | grep x | sort > out", "grep x f | sort > out"),
+            ("cat f | grep x > out | sort", "grep x f > out | sort"),
+            ("cat f | head -n 3 > 'my out'", "head -n 3 f > 'my out'"),
+            ("cat f | wc -l > out", "wc -l > out < f"),
+            ("cat f | tr a b 2> err", "tr a b 2> err < f"),
+            ("cat f | grep x | tr a b < g", "grep x f | tr a b < g"),
         ];
         for (input, expected) in cases {
             assert_eq!(
@@ -210,15 +208,24 @@ mod tests {
             "cat /.//dev/stdin | wc -l",
             "cat /proc | grep x",
             "cat /tmp/../proc/self/status | grep Vm",
-            "cat f | grep x > out",
-            "cat f | grep x | sort > out",
             "cat f | grep x < g",
             "cat f 2>&1 | grep x",
+            "cat f 2>/dev/null | grep x",
             "cat f > g | grep x",
             "cat < f | grep x",
-            "cat f | grep x 2>/dev/null",
+            "cat f | grep x > f",
+            "cat f | grep x >> ./f",
+            "cat dir/f | sort > f",
+            "cat f | grep x | sort > f",
+            "cat f | grep x > ../out",
+            "cat f | grep x > /dev/stdin",
+            "cat f | grep x 0>&2",
+            "cat f | grep x 3> out",
+            "cat f | wc -l 0> out",
+            "cat f | tr a b > f",
+            "cat f | wc -l < g",
+            "cat f | grep x | tr a b < g > g",
             "cat f | wc -l g",
-            "cat f | wc -l > out",
             "cat f | wc -l x -w",
             "cat f | tr",
             "cat f | tr a b c",
@@ -300,6 +307,8 @@ mod tests {
             "cat f | grep -e -x",
             "cat f | wc -l",
             "cat 'my file' | tr a b | sort",
+            "cat f | grep x > out 2>&1",
+            "cat f | wc -l > out",
         ];
         for input in inputs {
             let suggestion = check(&parse_str(input))

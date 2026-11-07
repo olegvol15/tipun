@@ -116,6 +116,61 @@ fn useless_cat_suggestions_match_the_original() {
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
 
+fn files(dir: &Path) -> Vec<(String, Vec<u8>)> {
+    let mut files: Vec<(String, Vec<u8>)> = fs::read_dir(dir)
+        .expect("read fixture dir")
+        .map(|entry| {
+            let entry = entry.expect("read dir entry");
+            let name = entry.file_name().to_string_lossy().into_owned();
+            (name, fs::read(entry.path()).expect("read fixture file"))
+        })
+        .collect();
+    files.sort();
+    files
+}
+
+#[test]
+fn suggestions_with_redirects_write_the_same_files() {
+    let originals = [
+        "cat app.log | grep ERROR > errors.txt",
+        "cat app.log | grep ERROR >> errors.txt",
+        "cat app.log | grep ERROR 2>/dev/null",
+        "cat app.log | grep ERROR > errors.txt 2>&1",
+        "cat app.log | grep warn | sort > sorted.txt",
+        "cat app.log | grep ERROR > errors.txt | wc -c",
+        "cat app.log | head -n 2 > 'top lines.txt'",
+        "cat app.log | wc -l > count.txt",
+        "cat app.log | tr a-z A-Z 2> err.txt",
+        "cat app.log | grep ERROR | tr a-z A-Z < case.txt",
+        "sort app.log | uniq > unique.txt",
+        "sort app.log | uniq >> unique.txt 2>&1",
+        "sort app.log | uniq | head -n 2 > top.txt",
+        "tr ' ' '\\n' < app.log | sort | uniq > words.txt",
+    ];
+    for (i, original) in originals.iter().enumerate() {
+        let Some(suggestion) = suggest(original) else {
+            panic!("tipun must suggest a rewrite for {original:?}");
+        };
+        let before = fixtures(&format!("redirect-original-{i}"));
+        let after = fixtures(&format!("redirect-suggestion-{i}"));
+        let expected = sh(&before, original);
+        let actual = sh(&after, &suggestion);
+        assert_eq!(expected.status.code(), Some(0), "original: {original:?}");
+        assert_eq!(actual.status.code(), Some(0), "suggestion: {suggestion:?}");
+        assert_eq!(
+            actual.stdout, expected.stdout,
+            "{original:?} vs {suggestion:?}"
+        );
+        assert_eq!(
+            files(&after),
+            files(&before),
+            "{original:?} vs {suggestion:?}"
+        );
+        fs::remove_dir_all(before).expect("remove fixture dir");
+        fs::remove_dir_all(after).expect("remove fixture dir");
+    }
+}
+
 #[test]
 fn excluded_flags_really_change_the_output() {
     let dir = fixtures("useless-cat-excluded");
@@ -188,6 +243,7 @@ fn grep_count_suggestions_match_the_original_count() {
         "grep -e warn -e ERROR app.log | wc -l",
         "grep '' app.log | wc -l",
         "sort app.log | grep info | wc -l",
+        "grep ERROR app.log | wc -l 2>/dev/null",
     ];
     for original in originals {
         let Some(suggestion) = suggest(original) else {
