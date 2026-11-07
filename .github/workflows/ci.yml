@@ -51,6 +51,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zsh
       - run: cargo build --locked
       - run: cargo test --locked
+      - name: Update check
+        run: |
+          mkdir -p "$RUNNER_TEMP/state"
+          (cd target/debug && pwd -P) > "$RUNNER_TEMP/state/install-path"
+          TIPUN_STATE_DIR="$RUNNER_TEMP/state" target/debug/tipun update | grep 'is up to date'
 
   install-script:
     name: Install script (${{ matrix.os }})

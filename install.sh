@@ -5,6 +5,7 @@
 #
 # TIPUN_VERSION picks a release tag (default: the latest release).
 # TIPUN_INSTALL_DIR picks the target directory (default: ~/.local/bin).
+# TIPUN_STATE_DIR picks where the install location is recorded for updates.
 
 set -eu
 
@@ -66,12 +67,17 @@ main() {
     mv "$dir/tipun.tmp" "$dir/tipun"
     echo "Installed $("$dir/tipun" --version) to $dir/tipun"
 
+    state="${TIPUN_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tipun}"
+    mkdir -p "$state"
+    (cd "$dir" && pwd -P) > "$state/install-path"
+
     case ":$PATH:" in
         *":$dir:"*) ;;
         *) echo "Add $dir to your PATH to run tipun." ;;
     esac
     echo "To enable tips in zsh, add this line to ~/.zshrc:"
     echo "  eval \"\$(tipun init zsh)\""
+    echo "tipun updates itself once a day. Set TIPUN_NO_UPDATE=1 to turn this off."
 }
 
 sha256() {

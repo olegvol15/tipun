@@ -7,8 +7,10 @@ occasionally suggests a cleaner way to write the same command, e.g.
 ## Product principles
 
 - **Silence over a questionable suggestion.** A missed tip is fine; a semantically wrong tip is not.
-- Local only: no network, no telemetry, no LLM, no external APIs. No state: tipun never writes to
-  disk, and a tip is shown every time a command matches a rule.
+- No AI: no LLM and no AI APIs. Suggestions come only from hand-written, deterministic rules.
+- A tip is shown every time a command matches a rule. State never stores command text.
+- tipun updates itself: `analyze` starts a detached `tipun update --quiet` at most once a day.
+  It only updates copies installed by `install.sh`, and `analyze` never waits on the network.
 - Fast: `tipun` runs before every prompt, so it must feel instant.
 - v0.1 supports zsh only, but the Rust core must stay shell-agnostic.
 
@@ -57,7 +59,12 @@ aliases (`cat` -> `bat`) and prefixes (`sudo`, `time`).
   exits 0 and never prints errors (only with `TIPUN_DEBUG=1`)
 - `tipun init zsh`: prints the embedded zsh integration
 
-Env: `TIPUN_DISABLE`, `TIPUN_DEBUG`. Silent when `CI` is set or the exit code is non-zero.
+- `tipun update [--quiet]`: installs the latest release over a copy installed by `install.sh`
+
+Env: `TIPUN_DISABLE`, `TIPUN_DEBUG`, `TIPUN_NO_UPDATE`, `TIPUN_STATE_DIR`. Silent and no update
+check when `CI` is set; no tip when the exit code is non-zero. State lives in `$TIPUN_STATE_DIR`,
+else `$XDG_STATE_HOME/tipun`, default `~/.local/state/tipun`: `last-update-check`, `install-path`
+(written by `install.sh`) and `updated` (a one-time notice).
 
 ## Dependencies
 
@@ -67,7 +74,8 @@ runtimes or network crates. Dev dependencies: none unless clearly needed.
 
 ## Performance
 
-- No filesystem access, no subprocesses, no history scanning.
+- `analyze` reads only the update files in the state directory, spawns at most one detached
+  updater a day and never scans history. Network access and other subprocesses belong in `update`.
 - No regex, no large tables, no work at startup beyond argument parsing.
 - Cap analyzed command length (1024 bytes).
 - No threads or parallelism: each run handles one short command, and spawning would cost more
@@ -109,6 +117,7 @@ runtimes or network crates. Dev dependencies: none unless clearly needed.
 
 ## Testing
 
+- Tests that run `analyze` set `TIPUN_NO_UPDATE=1`, or `TIPUN_STATE_DIR` to a temp directory.
 - Unit tests live in `#[cfg(test)] mod tests` in the same file; black-box tests of the binary go in
   `tests/`, using `env!("CARGO_BIN_EXE_tipun")`.
 - Table-driven tests for the lexer, parser and rules, including inputs that must be rejected.

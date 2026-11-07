@@ -26,6 +26,7 @@ fn run_interactive_zsh(name: &str, lines: &[&str]) -> String {
         .env_remove("TIPUN_DEBUG")
         .env_remove("TIPUN_DISABLE")
         .env_remove("CI")
+        .env("TIPUN_NO_UPDATE", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
