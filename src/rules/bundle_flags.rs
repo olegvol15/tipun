@@ -74,6 +74,12 @@ fn bundle(command: &Command) -> Option<(Command, String)> {
     if before_last.is_empty() || before_last.iter().any(takes_value) {
         return None;
     }
+    if words[..groups.len()]
+        .iter()
+        .any(|word| word.raw != word.value)
+    {
+        return None;
+    }
     let cluster: String = groups.iter().map(|group| &group[1..]).collect();
     let merged = format!("-{cluster}");
     let explanation = format!("{name} reads {} bundled as {merged}.", groups.join(" "));
@@ -165,6 +171,9 @@ mod tests {
             "grep -n5 -i x f",
             "git commit -m fix -a",
             "git commit -m a -m b",
+            "git commit -a -m'fix bug'",
+            "grep -i -e'a b' f",
+            "ls -l '-a'",
             "git commit --amend -a",
             "git -C dir commit -a -m x",
             "git add -A -v",
