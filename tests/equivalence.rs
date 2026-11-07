@@ -215,6 +215,7 @@ fn bundled_flags_read_the_same() {
         "ls -l -a -h src",
         "grep -i -v error app.log",
         "grep -i -e warn app.log",
+        "grep -i -ewarn app.log",
     ];
     assert_same_output(&dir, &originals);
     fs::remove_dir_all(dir).expect("remove fixture dir");
@@ -229,6 +230,7 @@ fn bundled_flags_change_files_the_same() {
         "mv -i -v app.log moved.log",
         "mkdir -p -v a/b/c",
         "mkdir -p -m 700 a/b",
+        "mkdir -p -m700 a/b",
         "touch -a -c app.log",
         "touch -c -m missing.txt",
     ];
@@ -239,7 +241,11 @@ fn bundled_flags_change_files_the_same() {
 fn bundled_git_commit_flags_commit_the_same() {
     let setup =
         "git init -q -b main && git add -A && git commit -q -m init && echo more >> app.log";
-    let originals = ["git commit -a -m fix", "git commit -a -q -m 'fix bug'"];
+    let originals = [
+        "git commit -a -m fix",
+        "git commit -a -q -m 'fix bug'",
+        "git commit -a -mfix",
+    ];
     for (i, original) in originals.iter().enumerate() {
         let suggestion = suggest(original).expect("tipun must suggest a rewrite");
         let before = fixtures(&format!("bundle-git-original-{i}"));

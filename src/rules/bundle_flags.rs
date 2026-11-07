@@ -82,7 +82,7 @@ fn bundle(command: &Command) -> Option<(Command, String)> {
     }
     let cluster: String = groups.iter().map(|group| &group[1..]).collect();
     let merged = format!("-{cluster}");
-    let explanation = format!("{name} reads {} bundled as {merged}.", groups.join(" "));
+    let explanation = format!("{name} accepts {} bundled as {merged}.", groups.join(" "));
     let mut args = command.args[..skip].to_vec();
     args.push(Word {
         raw: merged.clone(),
@@ -128,11 +128,14 @@ mod tests {
             ("mv -i -v a b", "mv -iv a b"),
             ("mkdir -p -v a/b", "mkdir -pv a/b"),
             ("mkdir -p -m 700 a", "mkdir -pm 700 a"),
+            ("mkdir -p -m700 a", "mkdir -pm700 a"),
             ("touch -a -c f", "touch -ac f"),
             ("grep -i -v x f", "grep -iv x f"),
             ("grep -i -e x f", "grep -ie x f"),
             ("git commit -a -m fix", "git commit -am fix"),
             ("git commit -a -m 'fix bug'", "git commit -am 'fix bug'"),
+            ("git commit -a -mfix", "git commit -amfix"),
+            ("grep -i -ex f", "grep -iex f"),
             ("git commit -s -a", "git commit -sa"),
             ("ls -l -a | grep x", "ls -la | grep x"),
             ("ls -l -a > out", "ls -la > out"),
@@ -191,10 +194,10 @@ mod tests {
     #[test]
     fn explains_the_bundle() {
         let cases = [
-            ("ls -l -a", "ls reads -l -a bundled as -la."),
+            ("ls -l -a", "ls accepts -l -a bundled as -la."),
             (
                 "git commit -a -m x",
-                "git commit reads -a -m bundled as -am.",
+                "git commit accepts -a -m bundled as -am.",
             ),
         ];
         for (input, expected) in cases {
