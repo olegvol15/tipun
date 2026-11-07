@@ -38,7 +38,7 @@ most significant one.
 
 ## Changes
 
-- <one bullet per meaningful change, grouped by area: cli, lexer, parser, rules, state, zsh>
+- <one bullet per meaningful change, grouped by area: cli, lexer, parser, rules, zsh>
 
 ## Safety
 
@@ -64,6 +64,6 @@ most significant one.
 
 - Keep it short. Leave out sections that would be empty, except Summary and Testing.
 - State only what the diff shows. If tests were not run, say so; do not claim they pass.
-- Call out anything that affects users directly: CLI flags, env vars, the state file format, the
-  zsh integration, new dependencies, startup time.
+- Call out anything that affects users directly: CLI flags, env vars, the zsh
+  integration, new dependencies, startup time.
 - No emoji, except in an attribution line your agent tool requires.

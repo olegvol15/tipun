@@ -18,7 +18,7 @@ The user is new to Rust and wants to build tipun in small, understandable steps.
 7. Rule `useless-cat` for grep, head, tail, sort, uniq (append the file).
 8. Rule `useless-cat` for wc, tr (`< FILE` instead).
 9. Rules `sort-uniq` and `grep-count`, alias check, redirect-placement check.
-10. State file and throttling, `analyze` subcommand, tip rendering.
+10. `analyze` subcommand and tip rendering (no state, no throttling).
 11. zsh integration, `init zsh`, smoke test.
 12. Benchmark, README, release v0.1.0.
 
