@@ -25,6 +25,8 @@ fn fixtures(name: &str) -> PathBuf {
     fs::write(dir.join("my file.txt"), SPACED).expect("write my file.txt");
     fs::write(dir.join("case.txt"), MIXED_CASE).expect("write case.txt");
     fs::write(dir.join("numbers.txt"), NUMBERS).expect("write numbers.txt");
+    fs::create_dir_all(dir.join("src")).expect("create src");
+    fs::write(dir.join("src/main.txt"), SPACED).expect("write src/main.txt");
     dir
 }
 
@@ -59,6 +61,14 @@ fn sh(dir: &Path, command: &str) -> Output {
     Command::new("/bin/sh")
         .args(["-c", command])
         .current_dir(dir)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_AUTHOR_NAME", "tipun")
+        .env("GIT_AUTHOR_EMAIL", "tipun@example.com")
+        .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_NAME", "tipun")
+        .env("GIT_COMMITTER_EMAIL", "tipun@example.com")
+        .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
         .output()
         .expect("failed to run sh")
 }
@@ -116,17 +126,55 @@ fn useless_cat_suggestions_match_the_original() {
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
 
-fn files(dir: &Path) -> Vec<(String, Vec<u8>)> {
-    let mut files: Vec<(String, Vec<u8>)> = fs::read_dir(dir)
-        .expect("read fixture dir")
-        .map(|entry| {
-            let entry = entry.expect("read dir entry");
-            let name = entry.file_name().to_string_lossy().into_owned();
-            (name, fs::read(entry.path()).expect("read fixture file"))
-        })
-        .collect();
-    files.sort();
-    files
+type Entry = (String, Option<Vec<u8>>);
+
+fn files(dir: &Path) -> Vec<Entry> {
+    let mut found = Vec::new();
+    collect_files(dir, dir, &mut found);
+    found.sort();
+    found
+}
+
+fn collect_files(root: &Path, dir: &Path, found: &mut Vec<Entry>) {
+    for entry in fs::read_dir(dir).expect("read fixture dir") {
+        let path = entry.expect("read dir entry").path();
+        let name = path
+            .strip_prefix(root)
+            .expect("entry is under the root")
+            .to_string_lossy()
+            .into_owned();
+        if path.is_dir() {
+            found.push((name, None));
+            collect_files(root, &path, found);
+        } else {
+            found.push((name, Some(fs::read(&path).expect("read fixture file"))));
+        }
+    }
+}
+
+fn assert_same_files(name: &str, originals: &[&str]) {
+    for (i, original) in originals.iter().enumerate() {
+        let Some(suggestion) = suggest(original) else {
+            panic!("tipun must suggest a rewrite for {original:?}");
+        };
+        let before = fixtures(&format!("{name}-original-{i}"));
+        let after = fixtures(&format!("{name}-suggestion-{i}"));
+        let expected = sh(&before, original);
+        let actual = sh(&after, &suggestion);
+        assert_eq!(expected.status.code(), Some(0), "original: {original:?}");
+        assert_eq!(actual.status.code(), Some(0), "suggestion: {suggestion:?}");
+        assert_eq!(
+            actual.stdout, expected.stdout,
+            "{original:?} vs {suggestion:?}"
+        );
+        assert_eq!(
+            files(&after),
+            files(&before),
+            "{original:?} vs {suggestion:?}"
+        );
+        fs::remove_dir_all(before).expect("remove fixture dir");
+        fs::remove_dir_all(after).expect("remove fixture dir");
+    }
 }
 
 #[test]
@@ -147,23 +195,59 @@ fn suggestions_with_redirects_write_the_same_files() {
         "sort app.log | uniq | head -n 2 > top.txt",
         "tr ' ' '\\n' < app.log | sort | uniq > words.txt",
     ];
+    assert_same_files("redirect", &originals);
+}
+
+#[test]
+fn bundled_flags_read_the_same() {
+    let dir = fixtures("bundle-read");
+    let originals = [
+        "ls -a -l src",
+        "ls -1 -t src",
+        "ls -l -a -h src",
+        "grep -i -v error app.log",
+        "grep -i -e warn app.log",
+    ];
+    assert_same_output(&dir, &originals);
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[test]
+fn bundled_flags_change_files_the_same() {
+    let originals = [
+        "rm -r -f src",
+        "rm -f -v app.log",
+        "cp -r -v src copy",
+        "mv -i -v app.log moved.log",
+        "mkdir -p -v a/b/c",
+        "mkdir -p -m 700 a/b",
+        "touch -a -c app.log",
+        "touch -c -m missing.txt",
+    ];
+    assert_same_files("bundle", &originals);
+}
+
+#[test]
+fn bundled_git_commit_flags_commit_the_same() {
+    let setup =
+        "git init -q -b main && git add -A && git commit -q -m init && echo more >> app.log";
+    let originals = ["git commit -a -m fix", "git commit -a -q -m 'fix bug'"];
     for (i, original) in originals.iter().enumerate() {
-        let Some(suggestion) = suggest(original) else {
-            panic!("tipun must suggest a rewrite for {original:?}");
-        };
-        let before = fixtures(&format!("redirect-original-{i}"));
-        let after = fixtures(&format!("redirect-suggestion-{i}"));
-        let expected = sh(&before, original);
-        let actual = sh(&after, &suggestion);
-        assert_eq!(expected.status.code(), Some(0), "original: {original:?}");
-        assert_eq!(actual.status.code(), Some(0), "suggestion: {suggestion:?}");
+        let suggestion = suggest(original).expect("tipun must suggest a rewrite");
+        let before = fixtures(&format!("bundle-git-original-{i}"));
+        let after = fixtures(&format!("bundle-git-suggestion-{i}"));
+        let state = "git log --format='%H %s' && git status --porcelain";
+        for (dir, command) in [(&before, *original), (&after, suggestion.as_str())] {
+            assert_eq!(sh(dir, setup).status.code(), Some(0), "setup");
+            assert_eq!(
+                sh(dir, command).status.code(),
+                Some(0),
+                "command: {command:?}"
+            );
+        }
         assert_eq!(
-            actual.stdout, expected.stdout,
-            "{original:?} vs {suggestion:?}"
-        );
-        assert_eq!(
-            files(&after),
-            files(&before),
+            sh(&after, state).stdout,
+            sh(&before, state).stdout,
             "{original:?} vs {suggestion:?}"
         );
         fs::remove_dir_all(before).expect("remove fixture dir");

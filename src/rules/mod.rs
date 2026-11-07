@@ -1,3 +1,4 @@
+mod bundle_flags;
 mod grep_count;
 mod sort_uniq;
 mod useless_cat;
@@ -13,7 +14,12 @@ pub struct Rewrite {
 
 type Rule = fn(&Pipeline) -> Option<Rewrite>;
 
-const RULES: &[Rule] = &[useless_cat::check, sort_uniq::check, grep_count::check];
+const RULES: &[Rule] = &[
+    useless_cat::check,
+    sort_uniq::check,
+    grep_count::check,
+    bundle_flags::check,
+];
 
 pub fn rewrite(pipeline: &Pipeline) -> Option<Rewrite> {
     RULES.iter().find_map(|rule| rule(pipeline))
