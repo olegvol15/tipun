@@ -37,8 +37,13 @@ fn suggest_is_silent_without_a_rewrite() {
 
 #[test]
 fn analyze_prints_the_tip_on_stderr() {
-    let cases: [&[&str]; 5] = [
+    let cases: [&[&str]; 6] = [
         &["analyze", "--command", "cat app.log | grep ERROR"],
+        &[
+            "analyze",
+            "--command=cat app.log | grep ERROR",
+            "--expanded=cat app.log | grep --color=auto --exclude-dir={.bzr,CVS,.git,.hg,.svn,.idea,.tox,.venv,venv} ERROR",
+        ],
         &[
             "analyze",
             "--command=cat  app.log|grep ERROR",
@@ -75,7 +80,7 @@ fn analyze_is_silent_when_aliases_change_the_command() {
     let command = "--command=cat app.log | grep ERROR";
     for expanded in [
         "--expanded=bat app.log | grep ERROR",
-        "--expanded=cat app.log | grep --color=auto ERROR",
+        "--expanded=cat app.log | grep --color=always ERROR",
         "--expanded=cat app.log | grep -v ERROR",
         "--expanded=cat app.log | grep ERROR | less",
         "--expanded=cat app.log | grep ERROR > out",
