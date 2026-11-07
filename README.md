@@ -69,6 +69,8 @@ echo 'eval "$(tipun init zsh)"' >> ~/.zshrc
 
 Open a new shell and type, for example, `sort file | uniq`. tipun stays silent after failed
 commands, when `CI` is set, and when aliases change the command (for example `alias cat=bat`).
+Aliases that only add `--color=auto` or `--exclude-dir=...` to `grep`, like the one oh-my-zsh
+defines, are fine.
 Set `TIPUN_DISABLE=1` to turn it off, or `TIPUN_DEBUG=1` to see why it stayed silent.
 
 To try a command without the hook:

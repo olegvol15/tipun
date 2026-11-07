@@ -294,3 +294,98 @@ fn grep_flags_that_change_what_is_printed_really_change_the_count() {
     }
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
+
+const OH_MY_ZSH_GREP: &str =
+    "grep --color=auto --exclude-dir={.bzr,CVS,.git,.hg,.svn,.idea,.tox,.venv,venv}";
+
+fn with_grep_alias(command: &str) -> String {
+    command.replace("grep ", &format!("{OH_MY_ZSH_GREP} "))
+}
+
+fn zsh(dir: &Path, command: &str) -> Vec<u8> {
+    let output = Command::new("zsh")
+        .args(["-f", "-c", command])
+        .current_dir(dir)
+        .output()
+        .expect("zsh must be installed to run this test");
+    assert_eq!(output.status.code(), Some(0), "command: {command:?}");
+    output.stdout
+}
+
+fn zsh_on_terminal(dir: &Path, command: &str) -> Vec<u8> {
+    let mut script = Command::new("script");
+    if cfg!(target_os = "macos") {
+        script.args(["-q", "/dev/null", "zsh", "-f", "-c", "eval \"$TIPUN_CMD\""]);
+    } else {
+        script.args([
+            "-q",
+            "-e",
+            "-c",
+            "zsh -f -c 'eval \"$TIPUN_CMD\"'",
+            "/dev/null",
+        ]);
+    }
+    let output = script
+        .env("TIPUN_CMD", command)
+        .env("TERM", "xterm-256color")
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("failed to run script");
+    assert_eq!(output.status.code(), Some(0), "command: {command:?}");
+    output.stdout
+}
+
+#[test]
+fn harmless_grep_alias_options_keep_suggestions_equivalent() {
+    let dir = fixtures("grep-alias");
+    let originals = [
+        ("cat app.log | grep ERROR", true),
+        ("cat app.log | grep -v info", false),
+        ("cat 'my file.txt' | grep -w line", true),
+        ("cat app.log | grep -e warn -e ERROR | sort", false),
+    ];
+    for (original, colored_on_terminal) in originals {
+        let suggestion = suggest(original).expect("tipun must suggest a rewrite");
+        let (original, suggestion) = (with_grep_alias(original), with_grep_alias(&suggestion));
+        assert_eq!(
+            zsh(&dir, &suggestion),
+            zsh(&dir, &original),
+            "{original:?} vs {suggestion:?}"
+        );
+        let colored = zsh_on_terminal(&dir, &original);
+        assert_eq!(
+            colored.windows(2).any(|pair| pair == b"\x1b["),
+            colored_on_terminal,
+            "color on a terminal: {original:?}"
+        );
+        assert_eq!(
+            zsh_on_terminal(&dir, &suggestion),
+            colored,
+            "{original:?} vs {suggestion:?}"
+        );
+    }
+    let counts = [
+        "grep ERROR app.log | wc -l",
+        "grep -i error app.log | wc -l",
+    ];
+    for original in counts {
+        let suggestion = suggest(original).expect("tipun must suggest a rewrite");
+        let (original, suggestion) = (with_grep_alias(original), with_grep_alias(&suggestion));
+        let unpadded = |output: Vec<u8>| {
+            let text = String::from_utf8(output).expect("count is UTF-8");
+            text.replace(' ', "")
+        };
+        assert_eq!(
+            unpadded(zsh(&dir, &suggestion)),
+            unpadded(zsh(&dir, &original)),
+            "{original:?} vs {suggestion:?}"
+        );
+        assert_eq!(
+            unpadded(zsh_on_terminal(&dir, &suggestion)),
+            unpadded(zsh_on_terminal(&dir, &original)),
+            "{original:?} vs {suggestion:?}"
+        );
+    }
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}

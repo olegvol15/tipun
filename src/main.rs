@@ -1,4 +1,5 @@
 mod args;
+mod expanded;
 mod lexer;
 mod parser;
 mod render;
@@ -9,7 +10,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
-use lexer::{Redirect, Token, Word};
+use lexer::{Redirect, Word};
 use parser::Pipeline;
 use rules::Rewrite;
 
@@ -92,7 +93,7 @@ fn analyze(command: &str, expanded: Option<&str>, exit_code: i32) {
         return;
     };
     if let Some(expanded) = expanded
-        && !same_words(command, expanded)
+        && !expanded::matches_typed(command, expanded)
     {
         if debug() {
             eprintln!("expanded command differs: {expanded:?}");
@@ -101,17 +102,6 @@ fn analyze(command: &str, expanded: Option<&str>, exit_code: i32) {
     }
     eprintln!("tipun tip: {}", render::render(&rewrite.pipeline));
     eprintln!("  {}", rewrite.explanation);
-}
-
-fn same_words(command: &str, expanded: &str) -> bool {
-    let (Ok(typed), Ok(expanded)) = (lexer::lex(command), lexer::lex(expanded)) else {
-        return false;
-    };
-    typed.len() == expanded.len()
-        && typed.iter().zip(&expanded).all(|pair| match pair {
-            (Token::Word(a), Token::Word(b)) => a.value == b.value,
-            (a, b) => a == b,
-        })
 }
 
 fn find_rewrite(command: &str) -> Option<Rewrite> {
