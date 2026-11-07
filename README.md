@@ -29,6 +29,7 @@ Early development, zsh only. tipun knows a small set of rewrites:
 | `cat file \| wc -l` | `wc -l < file` |
 | `sort file \| uniq` | `sort -u file` |
 | `grep x file \| wc -l` | `grep -c x file` |
+| `ls -l -a`, `rm -r -f dir` | `ls -la`, `rm -rf dir` |
 
 ## Install
 
