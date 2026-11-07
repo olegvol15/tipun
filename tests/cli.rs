@@ -37,8 +37,18 @@ fn suggest_is_silent_without_a_rewrite() {
 
 #[test]
 fn analyze_prints_the_tip_on_stderr() {
-    let cases: [&[&str]; 3] = [
+    let cases: [&[&str]; 5] = [
         &["analyze", "--command", "cat app.log | grep ERROR"],
+        &[
+            "analyze",
+            "--command=cat  app.log|grep ERROR",
+            "--expanded=cat app.log | grep 'ERROR'",
+        ],
+        &[
+            "analyze",
+            "--command=cat app.log | grep ERROR",
+            "--expanded=cat app.log | grep ERROR",
+        ],
         &[
             "analyze",
             "--command",
@@ -57,6 +67,44 @@ fn analyze_prints_the_tip_on_stderr() {
             "tipun tip: grep ERROR app.log\n  grep can read the file itself, no need for cat.\n",
             "args: {args:?}"
         );
+    }
+}
+
+#[test]
+fn analyze_is_silent_when_aliases_change_the_command() {
+    let command = "--command=cat app.log | grep ERROR";
+    for expanded in [
+        "--expanded=bat app.log | grep ERROR",
+        "--expanded=cat app.log | grep --color=auto ERROR",
+        "--expanded=cat app.log | grep -v ERROR",
+        "--expanded=cat app.log | grep ERROR | less",
+        "--expanded=cat app.log | grep ERROR > out",
+        "--expanded=cat $LOG | grep ERROR",
+        "--expanded=",
+    ] {
+        let output = tipun(&["analyze", command, expanded]);
+        assert_eq!(output.status.code(), Some(0), "{expanded:?}");
+        assert!(output.stdout.is_empty(), "{expanded:?}");
+        assert!(output.stderr.is_empty(), "{expanded:?}");
+    }
+}
+
+#[test]
+fn init_zsh_prints_the_hooks() {
+    let output = tipun(&["init", "zsh"]);
+    assert_eq!(output.status.code(), Some(0));
+    let script = String::from_utf8_lossy(&output.stdout);
+    assert!(script.contains("add-zsh-hook preexec _tipun_preexec"));
+    assert!(script.contains("add-zsh-hook precmd _tipun_precmd"));
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn init_rejects_unknown_shells() {
+    for args in [&["init", "bash"][..], &["init"]] {
+        let output = tipun(args);
+        assert_eq!(output.status.code(), Some(2), "args: {args:?}");
+        assert!(output.stdout.is_empty(), "args: {args:?}");
     }
 }
 
