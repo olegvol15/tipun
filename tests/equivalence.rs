@@ -327,6 +327,7 @@ fn zsh_on_terminal(dir: &Path, command: &str) -> Vec<u8> {
     }
     let output = script
         .env("TIPUN_CMD", command)
+        .env("TERM", "xterm-256color")
         .current_dir(dir)
         .stdin(std::process::Stdio::null())
         .output()
