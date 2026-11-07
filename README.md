@@ -16,12 +16,12 @@ tipun tip: grep ERROR app.log
 - **Deterministic.** Suggestions come from parsing the command, not from guessing.
 - **Silent when unsure.** tipun only suggests a rewrite when it is confident the behavior is the
   same. A missed tip is fine; a wrong one is not.
-- **Not annoying.** Tips are rare, throttled, and the same tip is not repeated forever.
+- **Short.** One tip on stderr after a command that could be written more simply, and nothing
+  otherwise.
 
 ## Status
 
-Early development. Nothing is usable yet. The first version will support zsh and a small set of
-rewrites, such as:
+Early development, zsh only. tipun knows a small set of rewrites:
 
 | You type | tipun suggests |
 |---|---|
@@ -29,6 +29,25 @@ rewrites, such as:
 | `cat file \| wc -l` | `wc -l < file` |
 | `sort file \| uniq` | `sort -u file` |
 | `grep x file \| wc -l` | `grep -c x file` |
+
+## Usage
+
+Install from a checkout and add the hook to `~/.zshrc`:
+
+```
+cargo install --path .
+echo 'eval "$(tipun init zsh)"' >> ~/.zshrc
+```
+
+Open a new shell and type, for example, `sort file | uniq`. tipun stays silent after failed
+commands, when `CI` is set, and when aliases change the command (for example `alias cat=bat`).
+Set `TIPUN_DISABLE=1` to turn it off, or `TIPUN_DEBUG=1` to see why it stayed silent.
+
+To try a command without the hook:
+
+```
+tipun suggest 'cat app.log | grep ERROR'
+```
 
 ## Building
 

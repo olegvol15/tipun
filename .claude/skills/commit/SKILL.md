@@ -47,7 +47,7 @@ Commit only when the user asked for it. Never push.
 - `ci`: GitHub Actions
 - `chore`: everything else (skills, tooling, cleanup)
 
-**Scope** (optional, one word): `cli`, `lexer`, `parser`, `rules`, `state`, `zsh`, `skills`,
+**Scope** (optional, one word): `cli`, `lexer`, `parser`, `rules`, `zsh`, `skills`,
 `deps`. Leave it out if the change spans several areas.
 
 **Summary:**
@@ -60,8 +60,8 @@ anything a reviewer would not see in the diff. For a new or changed rule, list i
 and any documented exception to the equivalence contract.
 
 **Footer:**
-- `BREAKING CHANGE: <what breaks>` when CLI flags, env vars, the state file format or the zsh
-  integration change incompatibly. Also add `!` after the type: `feat(cli)!: ...`.
+- `BREAKING CHANGE: <what breaks>` when CLI flags, env vars or the zsh integration change
+  incompatibly. Also add `!` after the type: `feat(cli)!: ...`.
 - End the message with the co-author trailer your agent tool asks for (for example the
   `Co-Authored-By:` line Claude Code provides). Do not invent one if the tool gives none.
 

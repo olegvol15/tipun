@@ -6,5 +6,3 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 clap = { version = "4.6.7", features = ["derive"] }
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.154"

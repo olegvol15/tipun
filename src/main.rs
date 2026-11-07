@@ -7,9 +7,9 @@ mod rules;
 use std::env;
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
-use lexer::{Redirect, Word};
+use lexer::{Redirect, Token, Word};
 use parser::Pipeline;
 use rules::Rewrite;
 
@@ -28,9 +28,19 @@ enum Command {
     Analyze {
         #[arg(long, allow_hyphen_values = true)]
         command: String,
+        #[arg(long, allow_hyphen_values = true)]
+        expanded: Option<String>,
         #[arg(long, default_value_t = 0)]
         exit_code: i32,
     },
+    Init {
+        shell: Shell,
+    },
+}
+
+#[derive(Clone, ValueEnum)]
+enum Shell {
+    Zsh,
 }
 
 fn main() -> ExitCode {
@@ -47,8 +57,18 @@ fn main() -> ExitCode {
 
     match cli.command {
         Command::Suggest { command } => suggest(&command),
-        Command::Analyze { command, exit_code } => {
-            analyze(&command, exit_code);
+        Command::Analyze {
+            command,
+            expanded,
+            exit_code,
+        } => {
+            analyze(&command, expanded.as_deref(), exit_code);
+            ExitCode::SUCCESS
+        }
+        Command::Init { shell } => {
+            match shell {
+                Shell::Zsh => print!("{}", include_str!("init.zsh")),
+            }
             ExitCode::SUCCESS
         }
     }
@@ -64,14 +84,34 @@ fn suggest(command: &str) -> ExitCode {
     }
 }
 
-fn analyze(command: &str, exit_code: i32) {
+fn analyze(command: &str, expanded: Option<&str>, exit_code: i32) {
     if exit_code != 0 || env::var_os("CI").is_some() || env::var_os("TIPUN_DISABLE").is_some() {
         return;
     }
-    if let Some(rewrite) = find_rewrite(command) {
-        eprintln!("tipun tip: {}", render::render(&rewrite.pipeline));
-        eprintln!("  {}", rewrite.explanation);
+    let Some(rewrite) = find_rewrite(command) else {
+        return;
+    };
+    if let Some(expanded) = expanded
+        && !same_words(command, expanded)
+    {
+        if debug() {
+            eprintln!("expanded command differs: {expanded:?}");
+        }
+        return;
     }
+    eprintln!("tipun tip: {}", render::render(&rewrite.pipeline));
+    eprintln!("  {}", rewrite.explanation);
+}
+
+fn same_words(command: &str, expanded: &str) -> bool {
+    let (Ok(typed), Ok(expanded)) = (lexer::lex(command), lexer::lex(expanded)) else {
+        return false;
+    };
+    typed.len() == expanded.len()
+        && typed.iter().zip(&expanded).all(|pair| match pair {
+            (Token::Word(a), Token::Word(b)) => a.value == b.value,
+            (a, b) => a == b,
+        })
 }
 
 fn find_rewrite(command: &str) -> Option<Rewrite> {

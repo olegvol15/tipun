@@ -7,7 +7,8 @@ occasionally suggests a cleaner way to write the same command, e.g.
 ## Product principles
 
 - **Silence over a questionable suggestion.** A missed tip is fine; a semantically wrong tip is not.
-- Local only: no network, no telemetry, no LLM, no external APIs. State never stores command text.
+- Local only: no network, no telemetry, no LLM, no external APIs. No state: tipun never writes to
+  disk, and a tip is shown every time a command matches a rule.
 - Fast: `tipun` runs before every prompt, so it must feel instant.
 - v0.1 supports zsh only, but the Rust core must stay shell-agnostic.
 
@@ -18,7 +19,6 @@ zsh adapter (thin: captures raw command, alias-expanded command, exit code)
   -> tipun analyze
   -> lexer -> parser -> Pipeline AST
   -> rules: fn(&Pipeline) -> Option<Rewrite>   (pure, no I/O)
-  -> state + throttle                           (disk is touched only if a rewrite exists)
   -> one short tip on stderr
 ```
 
@@ -57,18 +57,17 @@ aliases (`cat` -> `bat`) and prefixes (`sudo`, `time`).
   exits 0 and never prints errors (only with `TIPUN_DEBUG=1`)
 - `tipun init zsh`: prints the embedded zsh integration
 
-Env: `TIPUN_DISABLE`, `TIPUN_STATE_DIR`, `TIPUN_DEBUG`. Silent when `CI` is set or the exit code is
-non-zero. State: `$XDG_STATE_HOME/tipun/state.json`, default `~/.local/state/tipun/state.json`.
+Env: `TIPUN_DISABLE`, `TIPUN_DEBUG`. Silent when `CI` is set or the exit code is non-zero.
 
 ## Dependencies
 
-Runtime: `clap`, `serde`, `serde_json`. Nothing else without a strong reason and the user's
+Runtime: `clap`. Nothing else without a strong reason and the user's
 agreement: no `regex`, `dirs`, `thiserror`, `anyhow`, `tracing`/`log`, shell-parser crates, async
 runtimes or network crates. Dev dependencies: none unless clearly needed.
 
 ## Performance
 
-- No filesystem access unless a rewrite was found; no subprocesses; no history scanning.
+- No filesystem access, no subprocesses, no history scanning.
 - No regex, no large tables, no work at startup beyond argument parsing.
 - Cap analyzed command length (1024 bytes).
 - No threads or parallelism: each run handles one short command, and spawning would cost more
@@ -95,7 +94,7 @@ runtimes or network crates. Dev dependencies: none unless clearly needed.
   out from the code.
 - No emoji or emoji-like symbols, except in tests of multibyte input.
 - Prefer simple, explicit code over abstractions. No speculative generality.
-- Plain data structs (AST, state) may have public fields; no accessor boilerplate.
+- Plain data structs (such as the AST) may have public fields; no accessor boilerplate.
 - Derive `Debug, Clone, PartialEq, Eq` where it makes sense.
 - Prefer borrowing (`&str`, `&T`) over owned values; avoid needless allocations and clones.
 - Match exhaustively; avoid catch-all `_` arms when the enum is ours.
@@ -106,14 +105,13 @@ runtimes or network crates. Dev dependencies: none unless clearly needed.
 
 - No `.unwrap()` outside tests. `.expect("reason")` only for true invariants.
 - Fallible functions return `Result<T, E>` with small hand-written error types.
-- `analyze` swallows all errors (missing/corrupt state, parse failures) and exits 0 silently.
+- `analyze` swallows all errors (bad arguments, parse failures) and exits 0 silently.
 
 ## Testing
 
 - Unit tests live in `#[cfg(test)] mod tests` in the same file; black-box tests of the binary go in
   `tests/`, using `env!("CARGO_BIN_EXE_tipun")`.
 - Table-driven tests for the lexer, parser and rules, including inputs that must be rejected.
-- Use `TIPUN_STATE_DIR` with a temp directory for anything touching state.
 
 ## Before committing
 
