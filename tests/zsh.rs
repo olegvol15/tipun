@@ -17,8 +17,10 @@ fn run_interactive_zsh(name: &str, lines: &[&str]) -> String {
         std::env::var("PATH").unwrap_or_default()
     );
 
+    // Without +Z an interactive zsh started from a terminal reads its commands from the terminal
+    // instead of the piped stdin, and fails with "error on TTY read".
     let mut child = Command::new("zsh")
-        .args(["-f", "-i"])
+        .args(["-f", "-i", "+Z"])
         .current_dir(&dir)
         .env("PATH", path)
         .env_remove("TIPUN_DEBUG")
@@ -63,7 +65,12 @@ fn hook_is_silent_for_failures_aliases_and_other_commands() {
             "cat missing.txt | grep a",
             "alias sort='sort -r'",
             "sort words.txt | uniq",
+            "unalias sort",
+            "sort words.txt | uniq",
         ],
     );
-    assert!(!stderr.contains("tipun"), "stderr: {stderr:?}");
+    let tip =
+        "tipun tip: sort -u words.txt\n  sort -u drops duplicate lines itself, no need for uniq.\n";
+    assert_eq!(stderr.matches("tipun").count(), 1, "stderr: {stderr:?}");
+    assert!(stderr.ends_with(tip), "stderr: {stderr:?}");
 }
