@@ -58,11 +58,11 @@ To install by hand instead, download the archive for your platform from the
 For example, on an Apple Silicon Mac:
 
 ```
-curl -LO https://github.com/olegvol15/tipun/releases/download/v0.1.1/tipun-0.1.1-aarch64-apple-darwin.tar.gz
-shasum -a 256 tipun-0.1.1-aarch64-apple-darwin.tar.gz
-tar -xzf tipun-0.1.1-aarch64-apple-darwin.tar.gz
+curl -LO https://github.com/olegvol15/tipun/releases/download/v0.1.2/tipun-0.1.2-aarch64-apple-darwin.tar.gz
+shasum -a 256 tipun-0.1.2-aarch64-apple-darwin.tar.gz
+tar -xzf tipun-0.1.2-aarch64-apple-darwin.tar.gz
 mkdir -p ~/.local/bin
-mv tipun-0.1.1-aarch64-apple-darwin/tipun ~/.local/bin/
+mv tipun-0.1.2-aarch64-apple-darwin/tipun ~/.local/bin/
 ```
 
 Compare the checksum with the `.sha256` file next to the archive, and make sure `~/.local/bin` is
