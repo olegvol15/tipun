@@ -1,9 +1,11 @@
 mod bundle_flags;
+mod git_checkout;
+mod git_stash;
 mod grep_count;
 mod sort_uniq;
 mod useless_cat;
 
-use crate::lexer::Redirect;
+use crate::lexer::{Redirect, Word};
 use crate::parser::{Command, Pipeline, Redirection};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,11 +20,35 @@ const RULES: &[Rule] = &[
     useless_cat::check,
     sort_uniq::check,
     grep_count::check,
+    git_checkout::check,
+    git_stash::check,
     bundle_flags::check,
 ];
 
 pub fn rewrite(pipeline: &Pipeline) -> Option<Rewrite> {
     RULES.iter().find_map(|rule| rule(pipeline))
+}
+
+fn rewrite_each_stage(
+    pipeline: &Pipeline,
+    rewrite: fn(&Command) -> Option<(Command, String)>,
+) -> Option<Rewrite> {
+    pipeline.stages.iter().enumerate().find_map(|(i, stage)| {
+        let (command, explanation) = rewrite(stage)?;
+        let mut stages = pipeline.stages.clone();
+        stages[i] = command;
+        Some(Rewrite {
+            pipeline: Pipeline { stages },
+            explanation,
+        })
+    })
+}
+
+fn word(text: &str) -> Word {
+    Word {
+        raw: text.to_string(),
+        value: text.to_string(),
+    }
 }
 
 // The shell truncates an output file before the pipeline reads anything, so a target that may
