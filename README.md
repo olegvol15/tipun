@@ -11,15 +11,14 @@ suggests a cleaner way to write the same command.
 $ cat app.log | grep ERROR
 ...
 
-   ▄█▄     ╭ tipun ──────────────────────────────────────────╮
- ▄█████▄   │ grep ERROR app.log                              │
- █>██_██   │ grep can read the file itself, no need for cat. │
- ▀█▀▀▀█▀   ╰─────────────────────────────────────────────────╯
+╭ tipun ──────────────────────────────────────────╮
+│ grep ERROR app.log                              │
+│ grep can read the file itself, no need for cat. │
+╰─────────────────────────────────────────────────╯
 ```
 
-Set `NO_COLOR=1` to turn off colors. On a narrower terminal tipun drops the creature, then the box,
-and prints the same tip on two plain lines; it also uses plain lines when the output is not a
-terminal.
+Set `NO_COLOR=1` to turn off colors. When the box does not fit the terminal, or the output is not
+a terminal, tipun prints the same tip on two plain lines.
 
 ## Principles
 
