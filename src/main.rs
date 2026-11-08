@@ -4,9 +4,11 @@ mod lexer;
 mod parser;
 mod render;
 mod rules;
+mod tip;
 mod update;
 
 use std::env;
+use std::io::{self, IsTerminal};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -34,6 +36,8 @@ enum Command {
         expanded: Option<String>,
         #[arg(long, default_value_t = 0)]
         exit_code: i32,
+        #[arg(long)]
+        columns: Option<String>,
     },
     Init {
         shell: Shell,
@@ -67,8 +71,9 @@ fn main() -> ExitCode {
             command,
             expanded,
             exit_code,
+            columns,
         } => {
-            analyze(&command, expanded.as_deref(), exit_code);
+            analyze(&command, expanded.as_deref(), exit_code, columns.as_deref());
             ExitCode::SUCCESS
         }
         Command::Init { shell } => {
@@ -118,7 +123,7 @@ fn suggest(command: &str) -> ExitCode {
     }
 }
 
-fn analyze(command: &str, expanded: Option<&str>, exit_code: i32) {
+fn analyze(command: &str, expanded: Option<&str>, exit_code: i32, columns: Option<&str>) {
     if env::var_os("CI").is_some() || env::var_os("TIPUN_DISABLE").is_some() {
         return;
     }
@@ -141,8 +146,23 @@ fn analyze(command: &str, expanded: Option<&str>, exit_code: i32) {
         }
         return;
     }
-    eprintln!("tipun tip: {}", render::render(&rewrite.pipeline));
-    eprintln!("  {}", rewrite.explanation);
+    let suggestion = render::render(&rewrite.pipeline);
+    eprint!(
+        "{}",
+        tip::render(&suggestion, &rewrite.explanation, terminal(columns))
+    );
+}
+
+fn terminal(columns: Option<&str>) -> Option<tip::Terminal> {
+    if !io::stderr().is_terminal() {
+        return None;
+    }
+    let color = env::var_os("NO_COLOR").is_none_or(|value| value.is_empty())
+        && env::var_os("TERM").is_none_or(|term| term != "dumb");
+    Some(tip::Terminal {
+        columns: columns.and_then(|columns| columns.parse().ok()),
+        color,
+    })
 }
 
 fn find_rewrite(command: &str) -> Option<Rewrite> {

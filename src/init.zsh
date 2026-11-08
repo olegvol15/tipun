@@ -13,7 +13,8 @@ _tipun_precmd() {
     local typed=$_tipun_command expanded=$_tipun_expanded
     _tipun_command=
     _tipun_expanded=
-    command tipun analyze --command="$typed" --expanded="$expanded" --exit-code="$exit_code"
+    command tipun analyze --command="$typed" --expanded="$expanded" --exit-code="$exit_code" \
+        --columns="$COLUMNS"
 }
 
 autoload -Uz add-zsh-hook

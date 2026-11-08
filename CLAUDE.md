@@ -55,10 +55,10 @@ aliases (`cat` -> `bat`) and prefixes (`sudo`, `time`).
 ## CLI
 
 - `tipun suggest <CMD>`: pure, prints the suggestion, exit 0 if found, 1 if silent
-- `tipun analyze --command <CMD> [--expanded <CMD>] [--exit-code <N>]`: hook entry point; always
+- `tipun analyze --command <CMD> [--expanded <CMD>] [--exit-code <N>] [--columns <N>]`: hook
+  entry point; draws a box when stderr is a terminal wide enough, plain lines otherwise; always
   exits 0 and never prints errors (only with `TIPUN_DEBUG=1`)
 - `tipun init zsh`: prints the embedded zsh integration
-
 - `tipun update [--quiet]`: installs the latest release over a copy installed by `install.sh`
 
 Env: `TIPUN_DISABLE`, `TIPUN_DEBUG`, `TIPUN_NO_UPDATE`, `TIPUN_STATE_DIR`. Silent and no update
