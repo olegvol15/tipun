@@ -4,7 +4,7 @@ use crate::rules::{Rewrite, word};
 
 // Documented exception: git switch and git restore need git 2.23 or later.
 pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
-    super::rewrite_each_stage(pipeline, rewrite)
+    crate::rules::rewrite_each_stage(pipeline, rewrite)
 }
 
 fn rewrite(command: &Command) -> Option<(Command, String)> {
@@ -48,17 +48,7 @@ fn is_operand(word: &Word) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::lex;
-    use crate::parser::parse;
-    use crate::render::render;
-
-    fn parse_str(input: &str) -> Pipeline {
-        parse(lex(input).expect("test input must lex")).expect("test input must parse")
-    }
-
-    fn rewrite(input: &str) -> Option<String> {
-        check(&parse_str(input)).map(|rewrite| render(&rewrite.pipeline))
-    }
+    use crate::rules::testing::{assert_explains, assert_rewrites, assert_silent, assert_stable};
 
     #[test]
     fn rewrites_checkout_to_switch_and_restore() {
@@ -81,13 +71,7 @@ mod tests {
             ),
             ("git checkout -- f | cat", "git restore f | cat"),
         ];
-        for (input, expected) in cases {
-            assert_eq!(
-                rewrite(input).as_deref(),
-                Some(expected),
-                "input: {input:?}"
-            );
-        }
+        assert_rewrites(check, &cases);
     }
 
     #[test]
@@ -122,9 +106,7 @@ mod tests {
             "sudo git checkout -b feature",
             "checkout -b feature",
         ];
-        for input in cases {
-            assert_eq!(rewrite(input), None, "input: {input:?}");
-        }
+        assert_silent(check, &cases);
     }
 
     #[test]
@@ -143,25 +125,12 @@ mod tests {
                 "git restore discards changes to files; checkout also switches branches.",
             ),
         ];
-        for (input, expected) in cases {
-            let rewrite = check(&parse_str(input)).expect("input must be rewritten");
-            assert_eq!(rewrite.explanation, expected, "input: {input:?}");
-        }
+        assert_explains(check, &cases);
     }
 
     #[test]
     fn suggestion_parses_again_and_is_not_rewritten_twice() {
         let inputs = ["git checkout -b 'fix/a b' main", "git checkout -- a 'b c'"];
-        for input in inputs {
-            let suggestion = check(&parse_str(input))
-                .expect("input must be rewritten")
-                .pipeline;
-            assert_eq!(
-                parse_str(&render(&suggestion)),
-                suggestion,
-                "input: {input:?}"
-            );
-            assert_eq!(check(&suggestion), None, "input: {input:?}");
-        }
+        assert_stable(check, &inputs);
     }
 }

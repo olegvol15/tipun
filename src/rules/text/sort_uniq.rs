@@ -11,7 +11,7 @@ const SORT: Spec = Spec {
 pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
     for (i, pair) in pipeline.stages.windows(2).enumerate() {
         if let Some(merged) = merge(&pair[0], &pair[1]) {
-            if !super::only_harmless_redirects(pipeline) {
+            if !crate::rules::only_harmless_redirects(pipeline) {
                 return None;
             }
             let mut stages = pipeline.stages.clone();
@@ -29,7 +29,7 @@ fn merge(sort: &Command, uniq: &Command) -> Option<Command> {
     if sort.name.value != "sort" || uniq.name.value != "uniq" || !uniq.args.is_empty() {
         return None;
     }
-    if !sort.redirects.is_empty() || super::reads_redirected_input(uniq) {
+    if !sort.redirects.is_empty() || crate::rules::reads_redirected_input(uniq) {
         return None;
     }
     let args = args::split(&sort.args, &SORT)?;
@@ -48,17 +48,7 @@ fn merge(sort: &Command, uniq: &Command) -> Option<Command> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::lex;
-    use crate::parser::parse;
-    use crate::render::render;
-
-    fn parse_str(input: &str) -> Pipeline {
-        parse(lex(input).expect("test input must lex")).expect("test input must parse")
-    }
-
-    fn rewrite(input: &str) -> Option<String> {
-        check(&parse_str(input)).map(|rewrite| render(&rewrite.pipeline))
-    }
+    use crate::rules::testing::{assert_explains, assert_rewrites, assert_silent, assert_stable};
 
     #[test]
     fn rewrites_supported_pipelines() {
@@ -88,13 +78,7 @@ mod tests {
                 "tr a b < f | sort -u > out",
             ),
         ];
-        for (input, expected) in cases {
-            assert_eq!(
-                rewrite(input).as_deref(),
-                Some(expected),
-                "input: {input:?}"
-            );
-        }
+        assert_rewrites(check, &cases);
     }
 
     #[test]
@@ -124,9 +108,7 @@ mod tests {
             "sort --unique f | uniq",
             "sort -o out f | uniq",
         ];
-        for input in cases {
-            assert_eq!(rewrite(input), None, "input: {input:?}");
-        }
+        assert_silent(check, &cases);
     }
 
     #[test]
@@ -147,17 +129,17 @@ mod tests {
             "sort -i f | uniq",
             "sort -M f | uniq",
         ];
-        for input in cases {
-            assert_eq!(rewrite(input), None, "input: {input:?}");
-        }
+        assert_silent(check, &cases);
     }
 
     #[test]
     fn explains_the_rewrite() {
-        let rewrite = check(&parse_str("sort f | uniq")).expect("input must be rewritten");
-        assert_eq!(
-            rewrite.explanation,
-            "sort -u drops duplicate lines itself, no need for uniq."
+        assert_explains(
+            check,
+            &[(
+                "sort f | uniq",
+                "sort -u drops duplicate lines itself, no need for uniq.",
+            )],
         );
     }
 
@@ -168,16 +150,6 @@ mod tests {
             "sort -r 'my file' | uniq | head -n 3",
             "sort f | uniq > out 2>&1",
         ];
-        for input in inputs {
-            let suggestion = check(&parse_str(input))
-                .expect("input must be rewritten")
-                .pipeline;
-            assert_eq!(
-                parse_str(&render(&suggestion)),
-                suggestion,
-                "input: {input:?}"
-            );
-            assert_eq!(check(&suggestion), None, "input: {input:?}");
-        }
+        assert_stable(check, &inputs);
     }
 }

@@ -90,17 +90,7 @@ fn bundle(command: &Command) -> Option<(Command, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::lex;
-    use crate::parser::parse;
-    use crate::render::render;
-
-    fn parse_str(input: &str) -> Pipeline {
-        parse(lex(input).expect("test input must lex")).expect("test input must parse")
-    }
-
-    fn rewrite(input: &str) -> Option<String> {
-        check(&parse_str(input)).map(|rewrite| render(&rewrite.pipeline))
-    }
+    use crate::rules::testing::{assert_explains, assert_rewrites, assert_silent, assert_stable};
 
     #[test]
     fn bundles_separate_short_flags() {
@@ -129,13 +119,7 @@ mod tests {
             ("ls -l -a > out", "ls -la > out"),
             ("ls | grep -i -v x", "ls | grep -iv x"),
         ];
-        for (input, expected) in cases {
-            assert_eq!(
-                rewrite(input).as_deref(),
-                Some(expected),
-                "input: {input:?}"
-            );
-        }
+        assert_rewrites(check, &cases);
     }
 
     #[test]
@@ -174,9 +158,7 @@ mod tests {
             "tar -x -v -f a.tar",
             "cat -n -b f",
         ];
-        for input in cases {
-            assert_eq!(rewrite(input), None, "input: {input:?}");
-        }
+        assert_silent(check, &cases);
     }
 
     #[test]
@@ -188,10 +170,7 @@ mod tests {
                 "git commit accepts -a -m bundled as -am.",
             ),
         ];
-        for (input, expected) in cases {
-            let rewrite = check(&parse_str(input)).expect("input must be rewritten");
-            assert_eq!(rewrite.explanation, expected, "input: {input:?}");
-        }
+        assert_explains(check, &cases);
     }
 
     #[test]
@@ -201,16 +180,6 @@ mod tests {
             "git commit -a -m 'fix bug'",
             "mkdir -p -m 700 a",
         ];
-        for input in inputs {
-            let suggestion = check(&parse_str(input))
-                .expect("input must be rewritten")
-                .pipeline;
-            assert_eq!(
-                parse_str(&render(&suggestion)),
-                suggestion,
-                "input: {input:?}"
-            );
-            assert_eq!(check(&suggestion), None, "input: {input:?}");
-        }
+        assert_stable(check, &inputs);
     }
 }

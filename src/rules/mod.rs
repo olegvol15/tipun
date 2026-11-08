@@ -1,9 +1,8 @@
 mod bundle_flags;
-mod git_checkout;
-mod git_stash;
-mod grep_count;
-mod sort_uniq;
-mod useless_cat;
+mod git;
+#[cfg(test)]
+mod testing;
+mod text;
 
 use crate::lexer::{Redirect, Word};
 use crate::parser::{Command, Pipeline, Redirection};
@@ -17,11 +16,11 @@ pub struct Rewrite {
 type Rule = fn(&Pipeline) -> Option<Rewrite>;
 
 const RULES: &[Rule] = &[
-    useless_cat::check,
-    sort_uniq::check,
-    grep_count::check,
-    git_checkout::check,
-    git_stash::check,
+    text::useless_cat::check,
+    text::sort_uniq::check,
+    text::grep_count::check,
+    git::checkout::check,
+    git::stash::check,
     bundle_flags::check,
 ];
 
@@ -123,12 +122,7 @@ fn is_process_dependent(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::lex;
-    use crate::parser::parse;
-
-    fn parse_str(input: &str) -> Pipeline {
-        parse(lex(input).expect("test input must lex")).expect("test input must parse")
-    }
+    use crate::rules::testing::parse_str;
 
     #[test]
     fn accepts_output_redirects_to_other_files() {

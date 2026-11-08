@@ -17,7 +17,7 @@ pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
         return None;
     };
     let merged = merge(grep, wc)?;
-    if !super::only_harmless_redirects(pipeline) {
+    if !crate::rules::only_harmless_redirects(pipeline) {
         return None;
     }
     let mut stages = rest.to_vec();
@@ -36,7 +36,7 @@ fn merge(grep: &Command, wc: &Command) -> Option<Command> {
         return None;
     }
     if !grep.redirects.is_empty()
-        || super::reads_redirected_input(wc)
+        || crate::rules::reads_redirected_input(wc)
         || wc.redirects.iter().any(writes_stdout)
     {
         return None;
@@ -68,17 +68,7 @@ fn writes_stdout(redirect: &Redirection) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::lex;
-    use crate::parser::parse;
-    use crate::render::render;
-
-    fn parse_str(input: &str) -> Pipeline {
-        parse(lex(input).expect("test input must lex")).expect("test input must parse")
-    }
-
-    fn rewrite(input: &str) -> Option<String> {
-        check(&parse_str(input)).map(|rewrite| render(&rewrite.pipeline))
-    }
+    use crate::rules::testing::{assert_explains, assert_rewrites, assert_silent, assert_stable};
 
     #[test]
     fn rewrites_supported_pipelines() {
@@ -107,13 +97,7 @@ mod tests {
             ),
             ("tr a b < f | grep x | wc -l", "tr a b < f | grep -c x"),
         ];
-        for (input, expected) in cases {
-            assert_eq!(
-                rewrite(input).as_deref(),
-                Some(expected),
-                "input: {input:?}"
-            );
-        }
+        assert_rewrites(check, &cases);
     }
 
     #[test]
@@ -155,9 +139,7 @@ mod tests {
             "grep x f | wc -l | cut -c1",
             "grep x f | wc -l | sort",
         ];
-        for input in cases {
-            assert_eq!(rewrite(input), None, "input: {input:?}");
-        }
+        assert_silent(check, &cases);
     }
 
     #[test]
@@ -177,17 +159,17 @@ mod tests {
             "grep -m 2 x f | wc -l",
             "grep -f patterns f | wc -l",
         ];
-        for input in cases {
-            assert_eq!(rewrite(input), None, "input: {input:?}");
-        }
+        assert_silent(check, &cases);
     }
 
     #[test]
     fn explains_the_rewrite() {
-        let rewrite = check(&parse_str("grep x f | wc -l")).expect("input must be rewritten");
-        assert_eq!(
-            rewrite.explanation,
-            "grep -c counts matching lines itself, no need for wc -l."
+        assert_explains(
+            check,
+            &[(
+                "grep x f | wc -l",
+                "grep -c counts matching lines itself, no need for wc -l.",
+            )],
         );
     }
 
@@ -198,16 +180,6 @@ mod tests {
             "cat f | grep -e x | wc -l",
             "grep x f | wc -l 2> err",
         ];
-        for input in inputs {
-            let suggestion = check(&parse_str(input))
-                .expect("input must be rewritten")
-                .pipeline;
-            assert_eq!(
-                parse_str(&render(&suggestion)),
-                suggestion,
-                "input: {input:?}"
-            );
-            assert_eq!(check(&suggestion), None, "input: {input:?}");
-        }
+        assert_stable(check, &inputs);
     }
 }
