@@ -2,7 +2,7 @@ use crate::parser::{Command, Pipeline};
 use crate::rules::{Rewrite, word};
 
 pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
-    super::rewrite_each_stage(pipeline, rewrite)
+    crate::rules::rewrite_each_stage(pipeline, rewrite)
 }
 
 fn rewrite(command: &Command) -> Option<(Command, String)> {
@@ -35,17 +35,7 @@ fn rewrite(command: &Command) -> Option<(Command, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::lex;
-    use crate::parser::parse;
-    use crate::render::render;
-
-    fn parse_str(input: &str) -> Pipeline {
-        parse(lex(input).expect("test input must lex")).expect("test input must parse")
-    }
-
-    fn rewrite(input: &str) -> Option<String> {
-        check(&parse_str(input)).map(|rewrite| render(&rewrite.pipeline))
-    }
+    use crate::rules::testing::{assert_rewrites, assert_silent, assert_stable};
 
     #[test]
     fn rewrites_stash_save_to_push() {
@@ -62,13 +52,7 @@ mod tests {
             ),
             ("git stash save wip > out", "git stash push -m wip > out"),
         ];
-        for (input, expected) in cases {
-            assert_eq!(
-                rewrite(input).as_deref(),
-                Some(expected),
-                "input: {input:?}"
-            );
-        }
+        assert_rewrites(check, &cases);
     }
 
     #[test]
@@ -87,23 +71,11 @@ mod tests {
             "git save wip",
             "sudo git stash save wip",
         ];
-        for input in cases {
-            assert_eq!(rewrite(input), None, "input: {input:?}");
-        }
+        assert_silent(check, &cases);
     }
 
     #[test]
     fn suggestion_parses_again_and_is_not_rewritten_twice() {
-        for input in ["git stash save", "git stash save 'fix the bug'"] {
-            let suggestion = check(&parse_str(input))
-                .expect("input must be rewritten")
-                .pipeline;
-            assert_eq!(
-                parse_str(&render(&suggestion)),
-                suggestion,
-                "input: {input:?}"
-            );
-            assert_eq!(check(&suggestion), None, "input: {input:?}");
-        }
+        assert_stable(check, &["git stash save", "git stash save 'fix the bug'"]);
     }
 }

@@ -42,8 +42,8 @@ pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
     }
     let input = file_input(next)?;
     if !cat.redirects.is_empty()
-        || super::reads_redirected_input(next)
-        || !super::only_harmless_redirects(pipeline)
+        || crate::rules::reads_redirected_input(next)
+        || !crate::rules::only_harmless_redirects(pipeline)
     {
         return None;
     }
@@ -52,7 +52,7 @@ pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
     };
     if file.value.is_empty()
         || file.value.starts_with('-')
-        || super::is_process_dependent(&file.value)
+        || crate::rules::is_process_dependent(&file.value)
     {
         return None;
     }
@@ -109,17 +109,7 @@ fn file_input(command: &Command) -> Option<FileInput> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::lex;
-    use crate::parser::parse;
-    use crate::render::render;
-
-    fn parse_str(input: &str) -> Pipeline {
-        parse(lex(input).expect("test input must lex")).expect("test input must parse")
-    }
-
-    fn rewrite(input: &str) -> Option<String> {
-        check(&parse_str(input)).map(|rewrite| render(&rewrite.pipeline))
-    }
+    use crate::rules::testing::{assert_explains, assert_rewrites, assert_silent, assert_stable};
 
     #[test]
     fn rewrites_supported_pipelines() {
@@ -176,13 +166,7 @@ mod tests {
             ("cat f | tr a b 2> err", "tr a b 2> err < f"),
             ("cat f | grep x | tr a b < g", "grep x f | tr a b < g"),
         ];
-        for (input, expected) in cases {
-            assert_eq!(
-                rewrite(input).as_deref(),
-                Some(expected),
-                "input: {input:?}"
-            );
-        }
+        assert_rewrites(check, &cases);
     }
 
     #[test]
@@ -248,9 +232,7 @@ mod tests {
             "cat f | uniq in",
             "cat f | uniq in out",
         ];
-        for input in cases {
-            assert_eq!(rewrite(input), None, "input: {input:?}");
-        }
+        assert_silent(check, &cases);
     }
 
     #[test]
@@ -276,9 +258,7 @@ mod tests {
             "cat f | wc -L",
             "cat f | tr -t ab x",
         ];
-        for input in cases {
-            assert_eq!(rewrite(input), None, "input: {input:?}");
-        }
+        assert_silent(check, &cases);
     }
 
     #[test]
@@ -293,10 +273,7 @@ mod tests {
                 "wc can read the file through <, no need for cat.",
             ),
         ];
-        for (input, expected) in cases {
-            let rewrite = check(&parse_str(input)).expect("input must be rewritten");
-            assert_eq!(rewrite.explanation, expected, "input: {input:?}");
-        }
+        assert_explains(check, &cases);
     }
 
     #[test]
@@ -310,16 +287,6 @@ mod tests {
             "cat f | grep x > out 2>&1",
             "cat f | wc -l > out",
         ];
-        for input in inputs {
-            let suggestion = check(&parse_str(input))
-                .expect("input must be rewritten")
-                .pipeline;
-            assert_eq!(
-                parse_str(&render(&suggestion)),
-                suggestion,
-                "input: {input:?}"
-            );
-            assert_eq!(check(&suggestion), None, "input: {input:?}");
-        }
+        assert_stable(check, &inputs);
     }
 }

@@ -36,7 +36,12 @@ Also check that the suggestion parses again and that the rule returns `None` on 
 
 ## 3. Implement
 
-- One file in `src/rules/`, one plain function `fn check(pipeline: &Pipeline) -> Option<Rewrite>`.
+- One file per rule, in the folder for its area: `src/rules/text/` (text filters such as cat,
+  sort, grep), `src/rules/git/`, or `src/rules/` for rules that span areas. One plain function
+  `fn check(pipeline: &Pipeline) -> Option<Rewrite>`. A rule that rewrites a single command uses
+  `rewrite_each_stage` from `src/rules/mod.rs`.
+- Unit tests use the helpers in `src/rules/testing.rs`: `assert_rewrites`, `assert_silent`,
+  `assert_explains` and `assert_stable` take the rule and a table of cases.
 - No precondition comment: each precondition is an early `return None` in the code, and each one
   has a silent test.
 - Command knowledge (allowed flags) lives in the rule file. Reuse the shared argument helper if it
@@ -48,8 +53,11 @@ Also check that the suggestion parses again and that the rule returns `None` on 
 
 ## 4. Differential test
 
-Add the positive cases to the equivalence tests in `tests/`: run the original and the suggestion
-with `/bin/sh -c` on the fixtures and compare stdout and exit status. Add at least one "proof of
+Add the positive cases to the equivalence test file for the rule's area
+(`tests/equivalence_text.rs`, `tests/equivalence_git.rs` or `tests/equivalence_files.rs`), using
+the shared helpers in `tests/common/mod.rs` (`assert_same_output`, `assert_same_files`,
+`assert_same_git_state`): run the original and the suggestion with `/bin/sh -c` on the fixtures
+and compare stdout, files and exit status. Add at least one "proof of
 exclusion" case showing an excluded variant really does produce different output.
 
 ## 5. Finish
