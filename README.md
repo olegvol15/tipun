@@ -31,6 +31,8 @@ Early development, zsh only. tipun knows a small set of rewrites:
 | `sort file \| uniq` | `sort -u file` |
 | `grep x file \| wc -l` | `grep -c x file` |
 | `ls -l -a`, `rm -r -f dir` | `ls -la`, `rm -rf dir` |
+| `git checkout -b x`, `git checkout -- f` | `git switch -c x`, `git restore f` |
+| `git stash save wip` | `git stash push -m wip` |
 
 ## Install
 

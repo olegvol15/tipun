@@ -1,5 +1,4 @@
 use crate::args::{self, Spec};
-use crate::lexer::Word;
 use crate::parser::{Command, Pipeline};
 use crate::rules::Rewrite;
 
@@ -37,15 +36,7 @@ const GIT_COMMIT: Spec = Spec {
 };
 
 pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
-    pipeline.stages.iter().enumerate().find_map(|(i, stage)| {
-        let (bundled, explanation) = bundle(stage)?;
-        let mut stages = pipeline.stages.clone();
-        stages[i] = bundled;
-        Some(Rewrite {
-            pipeline: Pipeline { stages },
-            explanation,
-        })
-    })
+    super::rewrite_each_stage(pipeline, bundle)
 }
 
 fn bundle(command: &Command) -> Option<(Command, String)> {
@@ -84,10 +75,7 @@ fn bundle(command: &Command) -> Option<(Command, String)> {
     let merged = format!("-{cluster}");
     let explanation = format!("{name} accepts {} bundled as {merged}.", groups.join(" "));
     let mut args = command.args[..skip].to_vec();
-    args.push(Word {
-        raw: merged.clone(),
-        value: merged,
-    });
+    args.push(super::word(&merged));
     args.extend_from_slice(&words[groups.len()..]);
     Some((
         Command {

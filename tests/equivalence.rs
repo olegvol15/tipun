@@ -487,3 +487,73 @@ fn harmless_grep_alias_options_keep_suggestions_equivalent() {
     }
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
+
+const GIT_INIT: &str = "git init -q -b main && git add -A && git commit -q -m init";
+
+const GIT_STATE: &str = "git branch --show-current; \
+    git for-each-ref --format='%(refname) %(objectname) %(upstream)'; \
+    git config --get-regexp '^branch[.]'; \
+    git status --porcelain; \
+    git stash list --format='%gs %H'";
+
+fn worktree(dir: &Path) -> Vec<Entry> {
+    files(dir)
+        .into_iter()
+        .filter(|(name, _)| !name.starts_with(".git"))
+        .collect()
+}
+
+fn assert_same_git_state(name: &str, cases: &[(&str, &str)]) {
+    for (i, (setup, original)) in cases.iter().enumerate() {
+        let suggestion = suggest(original).expect("tipun must suggest a rewrite");
+        let before = fixtures(&format!("{name}-original-{i}"));
+        let after = fixtures(&format!("{name}-suggestion-{i}"));
+        for (dir, command) in [(&before, *original), (&after, suggestion.as_str())] {
+            assert_eq!(sh(dir, setup).status.code(), Some(0), "setup: {setup:?}");
+            let output = sh(dir, command);
+            assert_eq!(output.status.code(), Some(0), "command: {command:?}");
+        }
+        assert_eq!(
+            String::from_utf8_lossy(&sh(&after, GIT_STATE).stdout),
+            String::from_utf8_lossy(&sh(&before, GIT_STATE).stdout),
+            "{original:?} vs {suggestion:?}"
+        );
+        assert_eq!(
+            worktree(&after),
+            worktree(&before),
+            "{original:?} vs {suggestion:?}"
+        );
+        fs::remove_dir_all(before).expect("remove fixture dir");
+        fs::remove_dir_all(after).expect("remove fixture dir");
+    }
+}
+
+#[test]
+fn git_switch_and_restore_match_checkout() {
+    let remote = format!(
+        "{GIT_INIT} && git remote add origin https://example.invalid/tipun.git \
+         && git update-ref refs/remotes/origin/feature HEAD"
+    );
+    let changed = format!("{GIT_INIT} && echo changed >> app.log && echo x >> 'my file.txt'");
+    let cases = [
+        (GIT_INIT, "git checkout -b feature"),
+        (GIT_INIT, "git checkout -B main"),
+        (GIT_INIT, "git checkout -b feature main"),
+        (remote.as_str(), "git checkout -b feature origin/feature"),
+        (changed.as_str(), "git checkout -- app.log"),
+        (changed.as_str(), "git checkout -- app.log 'my file.txt'"),
+        (changed.as_str(), "git checkout -- ."),
+    ];
+    assert_same_git_state("git-checkout", &cases);
+}
+
+#[test]
+fn git_stash_push_matches_stash_save() {
+    let changed = format!("{GIT_INIT} && echo changed >> app.log");
+    let cases = [
+        (changed.as_str(), "git stash save"),
+        (changed.as_str(), "git stash save wip"),
+        (changed.as_str(), "git stash save 'fix the bug'"),
+    ];
+    assert_same_git_state("git-stash", &cases);
+}
