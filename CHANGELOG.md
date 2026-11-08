@@ -4,6 +4,16 @@ All notable changes to tipun are documented in this file. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and tipun follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-11-08
+
+### Added
+
+- Tips are drawn in a box on the terminal, with the suggestion in bold green. `NO_COLOR=1` turns
+  off colors. When the box does not fit or the output is not a terminal, tipun prints the plain
+  two lines as before.
+- Git tips: `git checkout -b x` -> `git switch -c x`, `git checkout -- f` -> `git restore f`, and
+  the deprecated `git stash save msg` -> `git stash push -m msg`.
+
 ## [0.1.1] - 2026-11-07
 
 ### Added
@@ -46,5 +56,6 @@ All notable changes to tipun are documented in this file. The format is based on
   silent when a redirect could change the result, such as writing to the file being read.
 - Prebuilt binaries for macOS (arm64, x86_64) and Linux (musl, x86_64 and arm64).
 
+[0.1.2]: https://github.com/olegvol15/tipun/releases/tag/v0.1.2
 [0.1.1]: https://github.com/olegvol15/tipun/releases/tag/v0.1.1
 [0.1.0]: https://github.com/olegvol15/tipun/releases/tag/v0.1.0
