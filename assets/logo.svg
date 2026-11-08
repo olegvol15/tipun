@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none" role="img" aria-labelledby="title desc">
+<title id="title">Tipun creature</title><desc id="desc">A mint pixel creature with a terminal prompt face, little feet, and a golden idea antenna.</desc>
+<g fill="#8DEBB5">
+<path d="M64 76H176V92H192V108H208V156H192V172H176V188H160V208H136V188H104V208H80V188H64V172H48V156H32V108H48V92H64V76Z"/>
+<path d="M112 76V44H128V76Z"/>
+</g>
+<path d="M112 20H144V36H160V52H144V68H112V52H96V36H112V20Z" fill="#F5CC70"/>
+<path d="M69 112L89 132L69 152" stroke="#142C29" stroke-width="12" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M121 148H153" stroke="#142C29" stroke-width="12"/>
+<path d="M64 172H80V188H64V172ZM160 172H176V188H160V172Z" fill="#5DBD90"/>
+</svg>
