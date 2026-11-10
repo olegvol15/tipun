@@ -1,6 +1,6 @@
 use std::env;
 use std::fmt;
-use std::fs;
+use std::fs::{self, File, OpenOptions, TryLockError};
 use std::io;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -8,7 +8,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime};
 
 const LATEST_RELEASE: &str = "https://github.com/olegvol15/tipun/releases/latest";
-const INSTALL_SCRIPT: &str = "https://raw.githubusercontent.com/olegvol15/tipun/main/install.sh";
+const RAW_FILES: &str = "https://raw.githubusercontent.com/olegvol15/tipun";
 const CHECK_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Debug)]
@@ -17,6 +17,7 @@ pub enum UpdateError {
     NotInstalledByScript,
     NoLatestRelease,
     InstallFailed,
+    AlreadyRunning,
     Io(io::Error),
 }
 
@@ -27,6 +28,7 @@ impl fmt::Display for UpdateError {
             UpdateError::NotInstalledByScript => write!(f, "tipun was not installed by install.sh"),
             UpdateError::NoLatestRelease => write!(f, "could not find the latest release"),
             UpdateError::InstallFailed => write!(f, "the install script failed"),
+            UpdateError::AlreadyRunning => write!(f, "another update is already running"),
             UpdateError::Io(err) => write!(f, "{err}"),
         }
     }
@@ -70,16 +72,17 @@ pub fn in_background() -> Result<(), UpdateError> {
 pub fn run(quiet: bool) -> Result<Outcome, UpdateError> {
     let dir = state_dir().ok_or(UpdateError::NoStateDir)?;
     let install_dir = installed_by_script(&dir)?;
+    fs::create_dir_all(&dir)?;
+    let _lock = lock(&dir)?;
     let tag = latest_tag()?;
     if !is_newer(&tag, env!("CARGO_PKG_VERSION")) {
         return Ok(Outcome::UpToDate);
     }
-    fs::create_dir_all(&dir)?;
-    let script = dir.join("install.sh");
+    let script = dir.join(format!("install-{}.sh", std::process::id()));
     let downloaded = Command::new("curl")
         .args(["-fsSL", "-o"])
         .arg(&script)
-        .arg(INSTALL_SCRIPT)
+        .arg(install_script(&tag))
         .stderr(Stdio::null())
         .status()?;
     if !downloaded.success() {
@@ -103,6 +106,21 @@ pub fn run(quiet: bool) -> Result<Outcome, UpdateError> {
         fs::write(dir.join("updated"), &tag)?;
     }
     Ok(Outcome::Updated(tag))
+}
+
+// The OS releases the lock when the updater exits, even if it crashes or hangs and is killed, so
+// there is no stale lock to take over and nothing to clean up.
+fn lock(dir: &Path) -> Result<File, UpdateError> {
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(dir.join("update.lock"))?;
+    match file.try_lock() {
+        Ok(()) => Ok(file),
+        Err(TryLockError::WouldBlock) => Err(UpdateError::AlreadyRunning),
+        Err(TryLockError::Error(err)) => Err(err.into()),
+    }
 }
 
 pub fn state_dir() -> Option<PathBuf> {
@@ -169,6 +187,10 @@ fn latest_tag() -> Result<String, UpdateError> {
     }
 }
 
+fn install_script(tag: &str) -> String {
+    format!("{RAW_FILES}/{tag}/install.sh")
+}
+
 fn is_due(last: Option<SystemTime>, now: SystemTime) -> bool {
     match last {
         Some(last) => now
@@ -229,6 +251,35 @@ mod tests {
         for (tag, current, expected) in cases {
             assert_eq!(is_newer(tag, current), expected, "{tag} vs {current}");
         }
+    }
+
+    #[test]
+    fn runs_the_installer_from_the_release_tag() {
+        assert_eq!(
+            install_script("v0.2.0"),
+            "https://raw.githubusercontent.com/olegvol15/tipun/v0.2.0/install.sh"
+        );
+    }
+
+    #[test]
+    fn lets_one_update_run_at_a_time() {
+        let dir = env::temp_dir().join(format!("tipun-lock-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("create lock dir");
+        let already_running = |result| matches!(result, Err(UpdateError::AlreadyRunning));
+        let first = lock(&dir).expect("first lock");
+        assert!(already_running(lock(&dir)));
+        drop(first);
+        let second = lock(&dir).expect("lock after release");
+        let refused = OpenOptions::new()
+            .write(true)
+            .open(dir.join("update.lock"))
+            .expect("open lock file");
+        assert!(refused.try_lock().is_err());
+        drop(refused);
+        assert!(already_running(lock(&dir)));
+        drop(second);
+        lock(&dir).expect("lock after the second release");
+        fs::remove_dir_all(dir).expect("remove lock dir");
     }
 
     #[test]
