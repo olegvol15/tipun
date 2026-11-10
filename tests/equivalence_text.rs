@@ -303,17 +303,23 @@ fn rewrites_inside_and_chains_match_the_original() {
 #[test]
 fn rules_stay_silent_after_exec_redirects_later_output() {
     let dir = fixtures("exec-redirect");
-    let original = "exec > out && grep ERROR app.log | wc -l";
-    let rewrite = "exec > out && grep -c ERROR app.log";
-    assert_eq!(suggest(original), None);
     let written = |command: &str| {
-        sh(&dir, command);
+        let output = zsh(&dir, command);
+        assert!(output.is_empty(), "{command:?} writes to out, not stdout");
         fs::read(dir.join("out")).expect("read out")
     };
-    let (expected, actual) = (written(original), written(rewrite));
-    if cfg!(target_os = "macos") {
-        assert_ne!(actual, expected, "BSD wc pads the count written to out");
+    for prefix in ["", "time "] {
+        let original = format!("{prefix}exec > out && grep ERROR app.log | wc -l");
+        let rewrite = format!("{prefix}exec > out && grep -c ERROR app.log");
+        assert_eq!(suggest(&original), None, "original: {original:?}");
+        let (expected, actual) = (written(&original), written(&rewrite));
+        if cfg!(target_os = "macos") {
+            assert_ne!(
+                actual, expected,
+                "BSD wc pads the count written by {original:?}"
+            );
+        }
+        assert_eq!(String::from_utf8_lossy(&expected).trim(), "2");
     }
-    assert_eq!(String::from_utf8_lossy(&expected).trim(), "2");
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }

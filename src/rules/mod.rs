@@ -32,14 +32,17 @@ const RULES: &[Rule] = &[
 // These may change the exit status, which decides whether the rest of an `&&` chain runs.
 const LAST_PIPELINE_RULES: &[Rule] = &[text::grep_count::check];
 
-// Builtins that change how later commands run (`exec > out` redirects everything after it), so
-// rules, which only see their own pipeline, stop at the first one.
+// Builtins that change how later commands run (`exec > out` redirects everything after it), and
+// prefixes that run a builtin in this shell (`time exec`). Rules only see their own pipeline, so
+// they stop at the first one.
 const SHELL_STATE_BUILTINS: &[&str] = &[
+    "-",
     ".",
     "alias",
     "autoload",
     "builtin",
     "command",
+    "coproc",
     "declare",
     "disable",
     "emulate",
@@ -56,11 +59,13 @@ const SHELL_STATE_BUILTINS: &[&str] = &[
     "nocorrect",
     "noglob",
     "readonly",
+    "repeat",
     "rehash",
     "set",
     "setopt",
     "shopt",
     "source",
+    "time",
     "trap",
     "typeset",
     "ulimit",
@@ -236,6 +241,9 @@ mod tests {
             "exec > out && grep x f | wc -l",
             "exec > out && cat f | grep x",
             "builtin exec > out && cat f | grep x",
+            "time exec > out && grep x f | wc -l",
+            "repeat 1 exec > out && cat f | grep x",
+            "- exec > out && cat f | grep x",
             "setopt sh_word_split && cat f | grep x",
             "export LC_ALL=C && sort f | uniq",
             "cd src && alias cat=bat && cat f | grep x",
