@@ -175,11 +175,17 @@ pub fn assert_same_git_state(name: &str, cases: &[(&str, &str)]) {
         let suggestion = suggest(original).expect("tipun must suggest a rewrite");
         let before = fixtures(&format!("{name}-original-{i}"));
         let after = fixtures(&format!("{name}-suggestion-{i}"));
+        let mut outputs = Vec::new();
         for (dir, command) in [(&before, *original), (&after, suggestion.as_str())] {
             assert_eq!(sh(dir, setup).status.code(), Some(0), "setup: {setup:?}");
             let output = sh(dir, command);
             assert_eq!(output.status.code(), Some(0), "command: {command:?}");
+            outputs.push(String::from_utf8_lossy(&output.stdout).into_owned());
         }
+        assert_eq!(
+            outputs[1], outputs[0],
+            "stdout of {original:?} vs {suggestion:?}"
+        );
         assert_eq!(
             String::from_utf8_lossy(&sh(&after, GIT_STATE).stdout),
             String::from_utf8_lossy(&sh(&before, GIT_STATE).stdout),

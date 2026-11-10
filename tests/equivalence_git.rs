@@ -72,9 +72,46 @@ fn merged_git_commands_change_the_repository_the_same() {
     let branches = format!("{GIT_INIT} && git branch a && git branch b");
     let cases = [
         (new_files.as_str(), "git add new1 && git add 'new 2'"),
-        (GIT_INIT, "git rm -q app.log && git rm -q case.txt"),
+        (GIT_INIT, "git rm -q case.txt && git rm -q app.log"),
         (GIT_INIT, "git rm -r -q src && git rm -r -q numbers.txt"),
-        (branches.as_str(), "git branch -d a && git branch -d b"),
+        (branches.as_str(), "git branch -d b && git branch -d a"),
     ];
     assert_same_git_state("merge-git", &cases);
+}
+
+#[test]
+fn excluding_pathspecs_and_noisy_git_rm_are_not_merged() {
+    let pairs = [
+        (
+            "git add new1 && git add new2 ':!new1'",
+            "git add new1 new2 ':!new1'",
+        ),
+        (
+            "git rm -q app.log && git rm -q case.txt ':!app.log'",
+            "git rm -q app.log case.txt ':!app.log'",
+        ),
+        (
+            "git rm case.txt && git rm app.log",
+            "git rm case.txt app.log",
+        ),
+    ];
+    let setup = format!("{GIT_INIT} && echo one > new1 && echo two > new2");
+    let state = "git status --porcelain";
+    for (i, (original, merged)) in pairs.iter().enumerate() {
+        assert_eq!(suggest(original), None, "original: {original:?}");
+        let (before, after) = (
+            fixtures(&format!("merge-git-excluded-{i}")),
+            fixtures(&format!("merge-git-merged-{i}")),
+        );
+        let mut results = Vec::new();
+        for (dir, command) in [(&before, *original), (&after, *merged)] {
+            assert_eq!(sh(dir, &setup).status.code(), Some(0), "setup");
+            let output = sh(dir, command);
+            assert_eq!(output.status.code(), Some(0), "command: {command:?}");
+            results.push((output.stdout, sh(dir, state).stdout));
+        }
+        assert_ne!(results[0], results[1], "{original:?} vs {merged:?}");
+        fs::remove_dir_all(before).expect("remove fixture dir");
+        fs::remove_dir_all(after).expect("remove fixture dir");
+    }
 }

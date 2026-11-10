@@ -16,7 +16,7 @@ struct Kind {
     skip: usize,
     flags: &'static str,
     with_value: &'static str,
-    needs_option: bool,
+    requires: &'static str,
     shape: Shape,
 }
 
@@ -26,7 +26,7 @@ const fn kind(name: &'static str, skip: usize, flags: &'static str, shape: Shape
         skip,
         flags,
         with_value: "",
-        needs_option: false,
+        requires: "",
         shape,
     }
 }
@@ -38,12 +38,17 @@ const MKDIR: Kind = Kind {
     ..kind("mkdir", 0, "pv", Shape::Operands)
 };
 const CHMOD: Kind = kind("chmod", 0, "", Shape::ModeThenFiles);
-const CP: Kind = kind("cp", 0, "afinpRrv", Shape::IntoDirectory);
-const MV: Kind = kind("mv", 0, "finv", Shape::IntoDirectory);
+// Without -r, cp cannot create `dir/` itself, so a successful run proves it already existed. mv is
+// left out: `mv a dir/` renames a directory `a` when `dir` does not exist.
+const CP: Kind = kind("cp", 0, "finpv", Shape::IntoDirectory);
 const GIT_ADD: Kind = kind("git add", 1, "", Shape::Operands);
-const GIT_RM: Kind = kind("git rm", 1, "fqr", Shape::Operands);
+// git rm prints the removed paths in index order, not in the order typed.
+const GIT_RM: Kind = Kind {
+    requires: "q",
+    ..kind("git rm", 1, "fqr", Shape::Operands)
+};
 const GIT_BRANCH: Kind = Kind {
-    needs_option: true,
+    requires: "dD",
     ..kind("git branch", 1, "dD", Shape::Operands)
 };
 
@@ -103,7 +108,6 @@ fn parts(pipeline: &Pipeline) -> Option<Parts<'_>> {
         ("mkdir", _) => MKDIR,
         ("chmod", _) => CHMOD,
         ("cp", _) => CP,
-        ("mv", _) => MV,
         ("git", Some("add")) => GIT_ADD,
         ("git", Some("rm")) => GIT_RM,
         ("git", Some("branch")) => GIT_BRANCH,
@@ -115,7 +119,7 @@ fn parts(pipeline: &Pipeline) -> Option<Parts<'_>> {
         with_value: kind.with_value,
     };
     let split = args::split(words, &spec)?;
-    if kind.needs_option && split.flags.is_empty() {
+    if !kind.requires.is_empty() && !split.flags.iter().any(|c| kind.requires.contains(*c)) {
         return None;
     }
     let options = &words[..words.len() - split.operands.len()];
@@ -133,6 +137,10 @@ fn parts(pipeline: &Pipeline) -> Option<Parts<'_>> {
         }
     };
     if operands.is_empty() {
+        return None;
+    }
+    // Pathspec magic such as `:!a` excludes paths named by every operand, not just its own call.
+    if kind.skip > 0 && operands.iter().any(|word| word.value.starts_with(':')) {
         return None;
     }
     Some(Parts {
@@ -217,14 +225,14 @@ mod tests {
             ("chmod +x a.sh && chmod +x b.sh", "chmod +x a.sh b.sh"),
             ("chmod 644 a && chmod 644 b c", "chmod 644 a b c"),
             ("cp a dir/ && cp b dir/", "cp a b dir/"),
-            (
-                "cp -r src lib out/ && cp -r docs out/",
-                "cp -r src lib docs out/",
-            ),
-            ("mv a.txt done/ && mv b.txt done/", "mv a.txt b.txt done/"),
+            ("cp -p a b out/ && cp -p c out/", "cp -p a b c out/"),
             ("git add a && git add b", "git add a b"),
             ("git add src && git add 'my file'", "git add src 'my file'"),
-            ("git rm -r old && git rm -r older", "git rm -r old older"),
+            (
+                "git rm -q -r old && git rm -q -r older",
+                "git rm -q -r old older",
+            ),
+            ("git rm -qr a && git rm -qr b", "git rm -qr a b"),
             ("git branch -d a && git branch -d b", "git branch -d a b"),
             ("git branch -D a && git branch -D b", "git branch -D a b"),
             ("cd src && touch a && touch b", "cd src && touch a b"),
@@ -279,13 +287,22 @@ mod tests {
             "cp a dir/ && cp b ./dir/",
             "cp x/a dir/ && cp y/a dir/",
             "cp a dir/ && cp a dir/",
-            "cp -r src/ out/ && cp -r lib out/",
-            "cp -r .. out/ && cp a out/",
+            "cp src/ out/ && cp lib out/",
+            "cp .. out/ && cp a out/",
             "cp a && cp b",
             "cp dir/ && cp b dir/",
             "cp -r a d/ && cp b d/",
+            "cp -r a out/ && cp -r b out/",
+            "cp -R a out/ && cp -R b out/",
+            "cp -a a out/ && cp -a b out/",
+            "mv a out/ && mv b out/",
             "mv a dir && mv b dir",
-            "mv x/a d/ && mv y/a d/",
+            "git rm a && git rm b",
+            "git rm -r a && git rm -r b",
+            "git add a && git add b ':!a'",
+            "git add ':(exclude)a' && git add b",
+            "git rm -q a && git rm -q b ':^a'",
+            "git add :/ && git add b",
             "sudo rm a && sudo rm b",
             "ls -l && ls -l",
             "chmod && chmod",
@@ -312,7 +329,7 @@ mod tests {
     fn suggestion_parses_again_and_is_not_rewritten_twice() {
         let inputs = [
             "touch a && touch 'b c'",
-            "cp -r src out/ && cp -r docs out/",
+            "cp src out/ && cp docs out/",
             "chmod 644 a && chmod 644 b",
             "git branch -d a && git branch -d b",
         ];
