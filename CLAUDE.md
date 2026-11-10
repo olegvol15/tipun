@@ -20,7 +20,8 @@ occasionally suggests a cleaner way to write the same command, e.g.
 zsh adapter (thin: captures raw command, alias-expanded command, exit code)
   -> tipun analyze
   -> lexer -> parser -> Chain of pipelines (joined by &&)
-  -> rules: fn(&Pipeline) -> Option<Rewrite>, tried on each pipeline   (pure, no I/O)
+  -> rules: fn(&Pipeline) -> Option<Rewrite>   (pure, no I/O), tried on each pipeline up to
+     the first shell-state builtin; rules that merge stages only on the last one
   -> one short tip on stderr
 ```
 
@@ -53,8 +54,9 @@ Every rule MUST have:
 Known traps: `wc FILE` prints the filename (use `wc < FILE`); `sort -u` is not `sort | uniq` with
 `-f`/`-n`/`-k`; `grep -c` is not `grep | wc -l` with `-o` or context flags; `grep -r` with no file
 searches cwd; `tail -f`; `uniq A B` writes to B; `tr` takes no files; `cd foo` uses `CDPATH`;
-aliases (`cat` -> `bat`) and prefixes (`sudo`, `time`); builtins earlier in a chain (`exec > out`, `set`,
-`export`) that change how later commands run.
+aliases (`cat` -> `bat`) and prefixes (`sudo`, `time`); builtins earlier in a chain
+(`exec > out`, `set`, `export`) that change how later commands run; merged stages in a chain
+(`cat missing | sort && b` runs `b`, `sort missing && b` does not).
 
 ## CLI
 

@@ -292,12 +292,50 @@ fn harmless_grep_alias_options_keep_suggestions_equivalent() {
 fn rewrites_inside_and_chains_match_the_original() {
     let originals = [
         "cd src && cat main.txt | grep line",
-        "cat app.log | grep ERROR > errors.txt && wc -l < errors.txt",
+        "cat app.log | grep ERROR > errors.txt && ls -l -a errors.txt",
         "mkdir out && cat app.log | sort | uniq > out/sorted.txt",
         "touch new.txt && ls -l -a src && cat app.log | wc -l",
         "cat app.log | grep warn && cat 'my file.txt' | grep line",
     ];
     assert_same_files("chain", &originals);
+}
+
+#[test]
+fn merged_stages_stay_silent_before_the_end_of_a_chain() {
+    let dir = fixtures("chain-error-path");
+    let cases = [
+        (
+            "sort missing.txt | uniq && touch continued",
+            "sort -u missing.txt && touch continued",
+        ),
+        (
+            "cat missing.txt | sort && touch continued",
+            "sort missing.txt && touch continued",
+        ),
+    ];
+    for (original, rewrite) in cases {
+        assert_eq!(suggest(original), None, "original: {original:?}");
+        assert_eq!(
+            sh(&dir, original).status.code(),
+            Some(0),
+            "original: {original:?}"
+        );
+        assert!(
+            dir.join("continued").exists(),
+            "{original:?} runs the rest of the chain"
+        );
+        fs::remove_file(dir.join("continued")).expect("remove marker");
+        assert_ne!(
+            sh(&dir, rewrite).status.code(),
+            Some(0),
+            "rewrite: {rewrite:?}"
+        );
+        assert!(
+            !dir.join("continued").exists(),
+            "{rewrite:?} skips the rest of the chain"
+        );
+    }
+    fs::remove_dir_all(dir).expect("remove fixture dir");
 }
 
 #[test]

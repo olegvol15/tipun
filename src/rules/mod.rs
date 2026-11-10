@@ -21,16 +21,15 @@ pub struct Rewrite {
 
 type Rule = fn(&Pipeline) -> Option<Rewrite>;
 
-const RULES: &[Rule] = &[
+const RULES: &[Rule] = &[git::checkout::check, git::stash::check, bundle_flags::check];
+
+// These may change the exit status, which decides whether the rest of an `&&` chain runs. Merging
+// stages does: `cat missing | sort` exits 0 with sort's status, `sort missing` exits 2.
+const LAST_PIPELINE_RULES: &[Rule] = &[
     text::useless_cat::check,
     text::sort_uniq::check,
-    git::checkout::check,
-    git::stash::check,
-    bundle_flags::check,
+    text::grep_count::check,
 ];
-
-// These may change the exit status, which decides whether the rest of an `&&` chain runs.
-const LAST_PIPELINE_RULES: &[Rule] = &[text::grep_count::check];
 
 // Builtins that change how later commands run (`exec > out` redirects everything after it), and
 // prefixes that run a builtin in this shell (`time exec`). Rules only see their own pipeline, so
@@ -50,6 +49,7 @@ const SHELL_STATE_BUILTINS: &[&str] = &[
     "eval",
     "exec",
     "export",
+    "fc",
     "float",
     "functions",
     "hash",
@@ -58,6 +58,7 @@ const SHELL_STATE_BUILTINS: &[&str] = &[
     "local",
     "nocorrect",
     "noglob",
+    "r",
     "readonly",
     "repeat",
     "rehash",
@@ -212,21 +213,19 @@ mod tests {
     fn rewrites_the_first_matching_pipeline_of_a_chain() {
         let cases = [
             ("cd src && cat f | grep x", "cd src && grep x f"),
-            ("cat f | grep x && ls", "grep x f && ls"),
             (
                 "cat f | grep x && cat g | grep y",
-                "grep x f && cat g | grep y",
+                "cat f | grep x && grep y g",
             ),
-            (
-                "ls && sort f | uniq > out && cd ..",
-                "ls && sort -u f > out && cd ..",
-            ),
+            ("ls && sort f | uniq > out", "ls && sort -u f > out"),
             ("cd src && grep x f | wc -l", "cd src && grep -c x f"),
             (
                 "grep x f | wc -l && cat f | grep y",
                 "grep x f | wc -l && grep y f",
             ),
-            ("cat f | grep x && exec > out", "grep x f && exec > out"),
+            ("ls -l -a && cat f | grep x", "ls -la && cat f | grep x"),
+            ("git checkout -b x && ls", "git switch -c x && ls"),
+            ("ls -l -a && exec > out", "ls -la && exec > out"),
             ("echo exec && cat f | grep x", "echo exec && grep x f"),
         ];
         for (input, expected) in cases {
@@ -237,6 +236,11 @@ mod tests {
             "cd src && ls",
             "ls && cd ..",
             "grep x f | wc -l && touch marker",
+            "cat f | grep x && ls",
+            "cat missing | sort && touch marker",
+            "sort missing | uniq && echo continued",
+            "fc -e - exec && grep x f | wc -l",
+            "r exec && cat f | grep x",
             "grep x f | wc -l && ls && cd ..",
             "exec > out && grep x f | wc -l",
             "exec > out && cat f | grep x",
