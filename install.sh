@@ -62,15 +62,14 @@ main() {
 
     tar -xzf "$tmp/$name.tar.gz" -C "$tmp"
     mkdir -p "$dir"
-    cp "$tmp/$name/tipun" "$dir/.tipun.$$"
-    chmod 755 "$dir/.tipun.$$"
-    mv "$dir/.tipun.$$" "$dir/tipun"
+    cp "$tmp/$name/tipun" "$dir/tipun.tmp"
+    chmod 755 "$dir/tipun.tmp"
+    mv "$dir/tipun.tmp" "$dir/tipun"
     echo "Installed $("$dir/tipun" --version) to $dir/tipun"
 
     state="${TIPUN_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tipun}"
     mkdir -p "$state"
-    (cd "$dir" && pwd -P) > "$state/install-path.$$"
-    mv "$state/install-path.$$" "$state/install-path"
+    (cd "$dir" && pwd -P) > "$state/install-path"
 
     case ":$PATH:" in
         *":$dir:"*) ;;

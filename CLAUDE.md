@@ -10,8 +10,7 @@ occasionally suggests a cleaner way to write the same command, e.g.
 - No AI: no LLM and no AI APIs. Suggestions come only from hand-written, deterministic rules.
 - A tip is shown every time a command matches a rule. State never stores command text.
 - tipun updates itself: `analyze` starts a detached `tipun update --quiet` at most once a day.
-  It only updates copies installed by `install.sh`, running the `install.sh` from the new release's
-  tag, never from `main`. `analyze` never waits on the network.
+  It only updates copies installed by `install.sh`, and `analyze` never waits on the network.
 - Fast: `tipun` runs before every prompt, so it must feel instant.
 - v0.1 supports zsh only, but the Rust core must stay shell-agnostic.
 

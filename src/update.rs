@@ -1,6 +1,6 @@
 use std::env;
 use std::fmt;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -8,9 +8,8 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime};
 
 const LATEST_RELEASE: &str = "https://github.com/olegvol15/tipun/releases/latest";
-const RAW_FILES: &str = "https://raw.githubusercontent.com/olegvol15/tipun";
+const INSTALL_SCRIPT: &str = "https://raw.githubusercontent.com/olegvol15/tipun/main/install.sh";
 const CHECK_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
-const LOCK_EXPIRES: Duration = Duration::from_secs(60 * 60);
 
 #[derive(Debug)]
 pub enum UpdateError {
@@ -18,7 +17,6 @@ pub enum UpdateError {
     NotInstalledByScript,
     NoLatestRelease,
     InstallFailed,
-    AlreadyRunning,
     Io(io::Error),
 }
 
@@ -29,7 +27,6 @@ impl fmt::Display for UpdateError {
             UpdateError::NotInstalledByScript => write!(f, "tipun was not installed by install.sh"),
             UpdateError::NoLatestRelease => write!(f, "could not find the latest release"),
             UpdateError::InstallFailed => write!(f, "the install script failed"),
-            UpdateError::AlreadyRunning => write!(f, "another update is already running"),
             UpdateError::Io(err) => write!(f, "{err}"),
         }
     }
@@ -73,17 +70,16 @@ pub fn in_background() -> Result<(), UpdateError> {
 pub fn run(quiet: bool) -> Result<Outcome, UpdateError> {
     let dir = state_dir().ok_or(UpdateError::NoStateDir)?;
     let install_dir = installed_by_script(&dir)?;
-    fs::create_dir_all(&dir)?;
-    let _lock = Lock::acquire(&dir, SystemTime::now())?;
     let tag = latest_tag()?;
     if !is_newer(&tag, env!("CARGO_PKG_VERSION")) {
         return Ok(Outcome::UpToDate);
     }
-    let script = dir.join(format!("install-{}.sh", std::process::id()));
+    fs::create_dir_all(&dir)?;
+    let script = dir.join("install.sh");
     let downloaded = Command::new("curl")
         .args(["-fsSL", "-o"])
         .arg(&script)
-        .arg(install_script(&tag))
+        .arg(INSTALL_SCRIPT)
         .stderr(Stdio::null())
         .status()?;
     if !downloaded.success() {
@@ -107,38 +103,6 @@ pub fn run(quiet: bool) -> Result<Outcome, UpdateError> {
         fs::write(dir.join("updated"), &tag)?;
     }
     Ok(Outcome::Updated(tag))
-}
-
-struct Lock(PathBuf);
-
-impl Lock {
-    fn acquire(dir: &Path, now: SystemTime) -> Result<Lock, UpdateError> {
-        let path = dir.join("update.lock");
-        for _ in 0..2 {
-            match OpenOptions::new().write(true).create_new(true).open(&path) {
-                Ok(_) => return Ok(Lock(path)),
-                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                    let modified = fs::metadata(&path).and_then(|meta| meta.modified());
-                    if !modified.is_ok_and(|modified| is_stale(modified, now)) {
-                        return Err(UpdateError::AlreadyRunning);
-                    }
-                    match fs::remove_file(&path) {
-                        Ok(()) => {}
-                        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-                        Err(err) => return Err(err.into()),
-                    }
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Err(UpdateError::AlreadyRunning)
-    }
-}
-
-impl Drop for Lock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
-    }
 }
 
 pub fn state_dir() -> Option<PathBuf> {
@@ -205,10 +169,6 @@ fn latest_tag() -> Result<String, UpdateError> {
     }
 }
 
-fn install_script(tag: &str) -> String {
-    format!("{RAW_FILES}/{tag}/install.sh")
-}
-
 fn is_due(last: Option<SystemTime>, now: SystemTime) -> bool {
     match last {
         Some(last) => now
@@ -216,11 +176,6 @@ fn is_due(last: Option<SystemTime>, now: SystemTime) -> bool {
             .map_or(true, |age| age >= CHECK_EVERY),
         None => true,
     }
-}
-
-fn is_stale(modified: SystemTime, now: SystemTime) -> bool {
-    now.duration_since(modified)
-        .is_ok_and(|age| age >= LOCK_EXPIRES)
 }
 
 fn is_newer(tag: &str, current: &str) -> bool {
@@ -274,33 +229,6 @@ mod tests {
         for (tag, current, expected) in cases {
             assert_eq!(is_newer(tag, current), expected, "{tag} vs {current}");
         }
-    }
-
-    #[test]
-    fn runs_the_installer_from_the_release_tag() {
-        assert_eq!(
-            install_script("v0.2.0"),
-            "https://raw.githubusercontent.com/olegvol15/tipun/v0.2.0/install.sh"
-        );
-    }
-
-    #[test]
-    fn lets_one_update_run_at_a_time() {
-        let dir = env::temp_dir().join(format!("tipun-lock-{}", std::process::id()));
-        fs::create_dir_all(&dir).expect("create lock dir");
-        let now = SystemTime::now();
-        let first = Lock::acquire(&dir, now).expect("first lock");
-        assert!(matches!(
-            Lock::acquire(&dir, now),
-            Err(UpdateError::AlreadyRunning)
-        ));
-        drop(first);
-        let again = Lock::acquire(&dir, now).expect("lock after release");
-        let later = now + LOCK_EXPIRES + Duration::from_secs(1);
-        let taken_over = Lock::acquire(&dir, later).expect("stale lock is taken over");
-        drop((again, taken_over));
-        assert!(!dir.join("update.lock").exists());
-        fs::remove_dir_all(dir).expect("remove lock dir");
     }
 
     #[test]
