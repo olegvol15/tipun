@@ -34,3 +34,22 @@ fn bundled_flags_change_files_the_same() {
     ];
     assert_same_files("bundle", &originals);
 }
+
+#[test]
+fn merged_commands_change_files_the_same() {
+    let originals = [
+        "touch a && touch 'b c'",
+        "touch -c app.log && touch -c missing.txt",
+        "rm app.log && rm case.txt 'my file.txt'",
+        "rm -rf src && rm -rf missing",
+        "mkdir -p a/b && mkdir -p c",
+        "mkdir a && mkdir a/b",
+        "mkdir -m 700 a && mkdir -m 700 b",
+        "chmod 600 app.log && chmod 600 case.txt",
+        "chmod +x app.log && chmod +x 'my file.txt'",
+        "mkdir out && cp app.log out/ && cp case.txt out/",
+        "mkdir out && cp -r src out/ && cp -r 'my file.txt' out/",
+        "mkdir done && mv app.log done/ && mv src/main.txt done/",
+    ];
+    assert_same_files("merge", &originals);
+}

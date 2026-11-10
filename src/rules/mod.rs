@@ -1,5 +1,6 @@
 mod bundle_flags;
 mod git;
+mod merge_repeated;
 #[cfg(test)]
 mod testing;
 mod text;
@@ -20,6 +21,9 @@ pub struct Rewrite {
 }
 
 type Rule = fn(&Pipeline) -> Option<Rewrite>;
+type ChainRule = fn(&Chain) -> Option<Suggestion>;
+
+const CHAIN_RULES: &[ChainRule] = &[merge_repeated::check];
 
 const RULES: &[Rule] = &[git::checkout::check, git::stash::check, bundle_flags::check];
 
@@ -87,6 +91,16 @@ pub fn rewrite(chain: &Chain) -> Option<Suggestion> {
         .iter()
         .position(changes_shell_state)
         .unwrap_or(chain.pipelines.len());
+    let usable = Chain {
+        pipelines: chain.pipelines[..unchanged_state].to_vec(),
+    };
+    if let Some(mut suggestion) = CHAIN_RULES.iter().find_map(|rule| rule(&usable)) {
+        suggestion
+            .chain
+            .pipelines
+            .extend_from_slice(&chain.pipelines[unchanged_state..]);
+        return Some(suggestion);
+    }
     chain.pipelines[..unchanged_state]
         .iter()
         .enumerate()
@@ -227,6 +241,14 @@ mod tests {
             ("git checkout -b x && ls", "git switch -c x && ls"),
             ("ls -l -a && exec > out", "ls -la && exec > out"),
             ("echo exec && cat f | grep x", "echo exec && grep x f"),
+            (
+                "touch a && touch b && exec > out && touch c && touch d",
+                "touch a b && exec > out && touch c && touch d",
+            ),
+            (
+                "touch a && touch b && cat f | grep x",
+                "touch a b && cat f | grep x",
+            ),
         ];
         for (input, expected) in cases {
             let suggestion = rewrite(&parse_chain(input)).expect("input must be rewritten");
@@ -241,6 +263,8 @@ mod tests {
             "sort missing | uniq && echo continued",
             "fc -e - exec && grep x f | wc -l",
             "r exec && cat f | grep x",
+            "exec > out && touch a && touch b",
+            "touch a && setopt x && touch b",
             "grep x f | wc -l && ls && cd ..",
             "exec > out && grep x f | wc -l",
             "exec > out && cat f | grep x",

@@ -65,3 +65,16 @@ fn git_stash_push_matches_stash_save() {
     ];
     assert_same_git_state("git-stash", &cases);
 }
+
+#[test]
+fn merged_git_commands_change_the_repository_the_same() {
+    let new_files = format!("{GIT_INIT} && echo one > new1 && echo two > 'new 2'");
+    let branches = format!("{GIT_INIT} && git branch a && git branch b");
+    let cases = [
+        (new_files.as_str(), "git add new1 && git add 'new 2'"),
+        (GIT_INIT, "git rm -q app.log && git rm -q case.txt"),
+        (GIT_INIT, "git rm -r -q src && git rm -r -q numbers.txt"),
+        (branches.as_str(), "git branch -d a && git branch -d b"),
+    ];
+    assert_same_git_state("merge-git", &cases);
+}

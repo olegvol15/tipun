@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -97,7 +98,7 @@ pub fn suggest(command: &str) -> Option<String> {
         .then(|| stdout.trim_end().to_string())
 }
 
-pub type Entry = (String, Option<Vec<u8>>);
+pub type Entry = (String, u32, Option<Vec<u8>>);
 
 pub fn files(dir: &Path) -> Vec<Entry> {
     let mut found = Vec::new();
@@ -114,11 +115,17 @@ pub fn collect_files(root: &Path, dir: &Path, found: &mut Vec<Entry>) {
             .expect("entry is under the root")
             .to_string_lossy()
             .into_owned();
+        let mode = fs::metadata(&path)
+            .expect("stat fixture entry")
+            .permissions()
+            .mode()
+            & 0o7777;
         if path.is_dir() {
-            found.push((name, None));
+            found.push((name, mode, None));
             collect_files(root, &path, found);
         } else {
-            found.push((name, Some(fs::read(&path).expect("read fixture file"))));
+            let content = fs::read(&path).expect("read fixture file");
+            found.push((name, mode, Some(content)));
         }
     }
 }
@@ -159,7 +166,7 @@ pub const GIT_STATE: &str = "git branch --show-current; \
 pub fn worktree(dir: &Path) -> Vec<Entry> {
     files(dir)
         .into_iter()
-        .filter(|(name, _)| !name.starts_with(".git"))
+        .filter(|(name, _, _)| !name.starts_with(".git"))
         .collect()
 }
 
