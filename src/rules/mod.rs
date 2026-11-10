@@ -24,19 +24,26 @@ type Rule = fn(&Pipeline) -> Option<Rewrite>;
 const RULES: &[Rule] = &[
     text::useless_cat::check,
     text::sort_uniq::check,
-    text::grep_count::check,
     git::checkout::check,
     git::stash::check,
     bundle_flags::check,
 ];
 
+// These may change the exit status, which decides whether the rest of an `&&` chain runs.
+const LAST_PIPELINE_RULES: &[Rule] = &[text::grep_count::check];
+
 pub fn rewrite(chain: &Chain) -> Option<Suggestion> {
+    let last = chain.pipelines.len().saturating_sub(1);
     chain
         .pipelines
         .iter()
         .enumerate()
         .find_map(|(i, pipeline)| {
-            let rewrite = RULES.iter().find_map(|rule| rule(pipeline))?;
+            let last_only = LAST_PIPELINE_RULES.iter().filter(|_| i == last);
+            let rewrite = RULES
+                .iter()
+                .chain(last_only)
+                .find_map(|rule| rule(pipeline))?;
             let mut pipelines = chain.pipelines.clone();
             pipelines[i] = rewrite.pipeline;
             Some(Suggestion {
@@ -156,12 +163,23 @@ mod tests {
                 "ls && sort f | uniq > out && cd ..",
                 "ls && sort -u f > out && cd ..",
             ),
+            ("cd src && grep x f | wc -l", "cd src && grep -c x f"),
+            (
+                "grep x f | wc -l && cat f | grep y",
+                "grep x f | wc -l && grep y f",
+            ),
         ];
         for (input, expected) in cases {
             let suggestion = rewrite(&parse_chain(input)).expect("input must be rewritten");
             assert_eq!(render(&suggestion.chain), expected, "input: {input:?}");
         }
-        for input in ["cd src && ls", "ls && cd .."] {
+        let silent = [
+            "cd src && ls",
+            "ls && cd ..",
+            "grep x f | wc -l && touch marker",
+            "grep x f | wc -l && ls && cd ..",
+        ];
+        for input in silent {
             assert_eq!(rewrite(&parse_chain(input)), None, "input: {input:?}");
         }
     }

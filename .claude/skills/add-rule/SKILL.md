@@ -49,7 +49,8 @@ Also check that the suggestion parses again and that the rule returns `None` on 
   exists; do not add a global capability table.
 - Build the new pipeline from the original words' `raw` text so quoting is preserved; only
   inserted words (like `-c`) are new.
-- Register the rule in the `RULES` list, ordered by priority.
+- Register the rule in the `RULES` list, ordered by priority. A rule whose suggestion can exit
+  with a different status goes in `LAST_PIPELINE_RULES`: in `a && b`, the status decides if `b` runs.
 - Write a short, plain explanation string for the tip (no emoji).
 
 ## 4. Differential test

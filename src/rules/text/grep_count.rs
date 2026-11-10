@@ -9,7 +9,8 @@ const GREP: Spec = Spec {
 };
 
 // Documented exceptions to the equivalence contract: with no matching lines `grep -c` exits 1,
-// while the pipeline exits 0 with `wc`; and BSD `wc -l` pads the count with leading spaces.
+// while the pipeline exits 0 with `wc`, so it only runs on the last pipeline of a chain;
+// and BSD `wc -l` pads the count with leading spaces.
 // Only the end of a pipeline is rewritten and its stdout is never redirected, so the padding
 // never reaches another command or a file.
 pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
