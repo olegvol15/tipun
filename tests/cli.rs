@@ -217,8 +217,10 @@ fn init_rejects_unknown_shells() {
 #[test]
 fn analyze_is_silent_and_exits_zero() {
     let command = "cat app.log | grep ERROR";
-    let cases: [(&[&str], Vars); 9] = [
+    let clear_screen = "cat app.log | grep '\x1b[2J\x1b[H'";
+    let cases: [(&[&str], Vars); 10] = [
         (&["analyze", "--command", "ls | grep x"], &[]),
+        (&["analyze", "--command", clear_screen], &[]),
         (&["analyze", "--command", "echo $HOME"], &[]),
         (&["analyze", "--command", ""], &[]),
         (&["analyze", "--command", "-rf"], &[]),

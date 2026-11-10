@@ -165,7 +165,7 @@ fn lex_quoted(
                 raw.push(c);
                 return Ok(());
             }
-            Some((_, '\n')) => return Err(LexError::Unsupported),
+            Some((_, c)) if c != '\t' && is_hidden(c) => return Err(LexError::Unsupported),
             Some((_, '$' | '`' | '\\' | '!')) if quote == '"' => {
                 return Err(LexError::Unsupported);
             }
@@ -178,7 +178,14 @@ fn lex_quoted(
 }
 
 fn is_word_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || "-_./:,=+@%".contains(c) || !c.is_ascii()
+    c.is_ascii_alphanumeric() || "-_./:,=+@%".contains(c) || (!c.is_ascii() && !is_hidden(c))
+}
+
+// The suggestion is printed to the terminal, so escape sequences and bidi overrides could
+// rewrite what the user sees.
+fn is_hidden(c: char) -> bool {
+    c.is_control()
+        || matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
 }
 
 #[cfg(test)]
@@ -383,6 +390,28 @@ mod tests {
                 assert_eq!(lex(&input), Err(LexError::Unsupported), "input: {input:?}");
             }
         }
+    }
+
+    #[test]
+    fn rejects_terminal_control_characters() {
+        let chars = [
+            '\x1b', '\x07', '\x08', '\r', '\0', '\x7f', '\u{9b}', '\u{85}', '\u{200f}', '\u{202e}',
+            '\u{2066}', '\u{2069}',
+        ];
+        for c in chars {
+            let inputs = [
+                format!("grep a{c}b f"),
+                format!("grep 'a{c}b' f"),
+                format!("grep \"a{c}b\" f"),
+            ];
+            for input in inputs {
+                assert_eq!(lex(&input), Err(LexError::Unsupported), "input: {input:?}");
+            }
+        }
+        assert_eq!(
+            lex("grep 'a\tb' f"),
+            Ok(vec![plain("grep"), w("'a\tb'", "a\tb"), plain("f")])
+        );
     }
 
     #[test]

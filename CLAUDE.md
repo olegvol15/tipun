@@ -29,6 +29,8 @@ zsh adapter (thin: captures raw command, alias-expanded command, exit code)
   words, single/double quotes without expansions, `|`, `&&`, `>`, `>>`, `<`, `n>`, `n>&m`).
   Anything else makes the whole command unsupported, and tipun stays silent. No regex-based
   matching. `;`, `||` and `&` stay unsupported: `a; b` runs `b` even when `a` fails.
+  Control characters and bidi overrides are rejected, so a printed suggestion cannot drive the
+  terminal.
 - Words keep both `raw` (as typed, quotes included) and `value` (unquoted). Suggestions are
   rendered from `raw` so the user's quoting is preserved.
 - Rules are plain functions in a static list. Command knowledge stays local to each rule; there is
