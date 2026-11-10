@@ -8,7 +8,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime};
 
 const LATEST_RELEASE: &str = "https://github.com/olegvol15/tipun/releases/latest";
-const INSTALL_SCRIPT: &str = "https://raw.githubusercontent.com/olegvol15/tipun/main/install.sh";
+const RAW_FILES: &str = "https://raw.githubusercontent.com/olegvol15/tipun";
 const CHECK_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Debug)]
@@ -79,7 +79,7 @@ pub fn run(quiet: bool) -> Result<Outcome, UpdateError> {
     let downloaded = Command::new("curl")
         .args(["-fsSL", "-o"])
         .arg(&script)
-        .arg(INSTALL_SCRIPT)
+        .arg(install_script(&tag))
         .stderr(Stdio::null())
         .status()?;
     if !downloaded.success() {
@@ -169,6 +169,10 @@ fn latest_tag() -> Result<String, UpdateError> {
     }
 }
 
+fn install_script(tag: &str) -> String {
+    format!("{RAW_FILES}/{tag}/install.sh")
+}
+
 fn is_due(last: Option<SystemTime>, now: SystemTime) -> bool {
     match last {
         Some(last) => now
@@ -229,6 +233,14 @@ mod tests {
         for (tag, current, expected) in cases {
             assert_eq!(is_newer(tag, current), expected, "{tag} vs {current}");
         }
+    }
+
+    #[test]
+    fn runs_the_installer_from_the_release_tag() {
+        assert_eq!(
+            install_script("v0.2.0"),
+            "https://raw.githubusercontent.com/olegvol15/tipun/v0.2.0/install.sh"
+        );
     }
 
     #[test]
