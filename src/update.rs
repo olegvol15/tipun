@@ -1,6 +1,6 @@
 use std::env;
 use std::fmt;
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions, TryLockError};
 use std::io;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -10,7 +10,6 @@ use std::time::{Duration, SystemTime};
 const LATEST_RELEASE: &str = "https://github.com/olegvol15/tipun/releases/latest";
 const RAW_FILES: &str = "https://raw.githubusercontent.com/olegvol15/tipun";
 const CHECK_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
-const LOCK_EXPIRES: Duration = Duration::from_secs(60 * 60);
 
 #[derive(Debug)]
 pub enum UpdateError {
@@ -74,7 +73,7 @@ pub fn run(quiet: bool) -> Result<Outcome, UpdateError> {
     let dir = state_dir().ok_or(UpdateError::NoStateDir)?;
     let install_dir = installed_by_script(&dir)?;
     fs::create_dir_all(&dir)?;
-    let _lock = Lock::acquire(&dir, SystemTime::now())?;
+    let _lock = lock(&dir)?;
     let tag = latest_tag()?;
     if !is_newer(&tag, env!("CARGO_PKG_VERSION")) {
         return Ok(Outcome::UpToDate);
@@ -109,35 +108,18 @@ pub fn run(quiet: bool) -> Result<Outcome, UpdateError> {
     Ok(Outcome::Updated(tag))
 }
 
-struct Lock(PathBuf);
-
-impl Lock {
-    fn acquire(dir: &Path, now: SystemTime) -> Result<Lock, UpdateError> {
-        let path = dir.join("update.lock");
-        for _ in 0..2 {
-            match OpenOptions::new().write(true).create_new(true).open(&path) {
-                Ok(_) => return Ok(Lock(path)),
-                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                    let modified = fs::metadata(&path).and_then(|meta| meta.modified());
-                    if !modified.is_ok_and(|modified| is_stale(modified, now)) {
-                        return Err(UpdateError::AlreadyRunning);
-                    }
-                    match fs::remove_file(&path) {
-                        Ok(()) => {}
-                        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-                        Err(err) => return Err(err.into()),
-                    }
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Err(UpdateError::AlreadyRunning)
-    }
-}
-
-impl Drop for Lock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
+// The OS releases the lock when the updater exits, even if it crashes or hangs and is killed, so
+// there is no stale lock to take over and nothing to clean up.
+fn lock(dir: &Path) -> Result<File, UpdateError> {
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(dir.join("update.lock"))?;
+    match file.try_lock() {
+        Ok(()) => Ok(file),
+        Err(TryLockError::WouldBlock) => Err(UpdateError::AlreadyRunning),
+        Err(TryLockError::Error(err)) => Err(err.into()),
     }
 }
 
@@ -218,11 +200,6 @@ fn is_due(last: Option<SystemTime>, now: SystemTime) -> bool {
     }
 }
 
-fn is_stale(modified: SystemTime, now: SystemTime) -> bool {
-    now.duration_since(modified)
-        .is_ok_and(|age| age >= LOCK_EXPIRES)
-}
-
 fn is_newer(tag: &str, current: &str) -> bool {
     match (parse_version(tag), parse_version(current)) {
         (Some(tag), Some(current)) => tag > current,
@@ -288,18 +265,20 @@ mod tests {
     fn lets_one_update_run_at_a_time() {
         let dir = env::temp_dir().join(format!("tipun-lock-{}", std::process::id()));
         fs::create_dir_all(&dir).expect("create lock dir");
-        let now = SystemTime::now();
-        let first = Lock::acquire(&dir, now).expect("first lock");
-        assert!(matches!(
-            Lock::acquire(&dir, now),
-            Err(UpdateError::AlreadyRunning)
-        ));
+        let already_running = |result| matches!(result, Err(UpdateError::AlreadyRunning));
+        let first = lock(&dir).expect("first lock");
+        assert!(already_running(lock(&dir)));
         drop(first);
-        let again = Lock::acquire(&dir, now).expect("lock after release");
-        let later = now + LOCK_EXPIRES + Duration::from_secs(1);
-        let taken_over = Lock::acquire(&dir, later).expect("stale lock is taken over");
-        drop((again, taken_over));
-        assert!(!dir.join("update.lock").exists());
+        let second = lock(&dir).expect("lock after release");
+        let refused = OpenOptions::new()
+            .write(true)
+            .open(dir.join("update.lock"))
+            .expect("open lock file");
+        assert!(refused.try_lock().is_err());
+        drop(refused);
+        assert!(already_running(lock(&dir)));
+        drop(second);
+        lock(&dir).expect("lock after the second release");
         fs::remove_dir_all(dir).expect("remove lock dir");
     }
 
