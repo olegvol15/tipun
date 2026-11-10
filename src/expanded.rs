@@ -21,7 +21,7 @@ fn drop_harmless_grep_options(expanded: &str) -> String {
             continue;
         }
         after_grep = at_command && chunk == "grep";
-        at_command = chunk == "|";
+        at_command = matches!(chunk, "|" | "&&");
         kept.push(chunk);
     }
     kept.join(" ")
@@ -65,6 +65,10 @@ mod tests {
                 format!("grep {OH_MY_ZSH} x f | grep {OH_MY_ZSH} y"),
             ),
             ("sort f | uniq", "sort f | uniq".to_string()),
+            (
+                "cd src && cat f | grep x",
+                format!("cd src && cat f | grep {OH_MY_ZSH} x"),
+            ),
         ];
         for (typed, expanded) in cases {
             assert!(matches_typed(typed, &expanded), "{typed:?} vs {expanded:?}");
@@ -92,6 +96,8 @@ mod tests {
             ("cat f | grep x", "cat f | grep x > out"),
             ("cat f | grep x", "cat $F | grep x"),
             ("cat f | grep x", ""),
+            ("cd src && cat f | grep x", "cd lib && cat f | grep x"),
+            ("cat f | grep x && ls", "cat f | grep x && ls -G"),
         ];
         for (typed, expanded) in cases {
             assert!(!matches_typed(typed, expanded), "{typed:?} vs {expanded:?}");

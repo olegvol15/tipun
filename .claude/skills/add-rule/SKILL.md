@@ -5,7 +5,8 @@ description: Add a new command-rewrite rule to tipun safely, with its preconditi
 
 # Add rule
 
-A rule turns a parsed `Pipeline` into a better `Pipeline`, or returns `None`. A wrong suggestion
+A rule turns a parsed `Pipeline` into a better `Pipeline`, or returns `None`. `rules::rewrite`
+tries every rule on each pipeline of an `&&` chain, so a pipeline rule works inside chains too. A wrong suggestion
 destroys trust, so every rule must prove its preconditions. Read the "Rule safety" section of
 `CLAUDE.md` first.
 

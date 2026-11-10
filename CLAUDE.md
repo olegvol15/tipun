@@ -19,15 +19,16 @@ occasionally suggests a cleaner way to write the same command, e.g.
 ```
 zsh adapter (thin: captures raw command, alias-expanded command, exit code)
   -> tipun analyze
-  -> lexer -> parser -> Pipeline AST
-  -> rules: fn(&Pipeline) -> Option<Rewrite>   (pure, no I/O)
+  -> lexer -> parser -> Chain of pipelines (joined by &&)
+  -> rules: fn(&Pipeline) -> Option<Rewrite>, tried on each pipeline   (pure, no I/O)
   -> one short tip on stderr
 ```
 
 - The core never depends on zsh concepts. The shell adapter makes no rule decisions.
 - **The parser is hand-written and fail-closed.** It accepts only a small whitelisted subset (plain
-  words, single/double quotes without expansions, `|`, `>`, `>>`, `<`, `n>`, `n>&m`). Anything else
-  makes the whole command unsupported, and tipun stays silent. No regex-based matching.
+  words, single/double quotes without expansions, `|`, `&&`, `>`, `>>`, `<`, `n>`, `n>&m`).
+  Anything else makes the whole command unsupported, and tipun stays silent. No regex-based
+  matching. `;`, `||` and `&` stay unsupported: `a; b` runs `b` even when `a` fails.
 - Words keep both `raw` (as typed, quotes included) and `value` (unquoted). Suggestions are
   rendered from `raw` so the user's quoting is preserved.
 - Rules are plain functions in a static list. Command knowledge stays local to each rule; there is

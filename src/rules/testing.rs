@@ -1,10 +1,16 @@
 use crate::lexer::lex;
-use crate::parser::{Pipeline, parse};
-use crate::render::render;
+use crate::parser::{Chain, Pipeline, parse};
+use crate::render::render_pipeline as render;
 use crate::rules::Rule;
 
-pub fn parse_str(input: &str) -> Pipeline {
+pub fn parse_chain(input: &str) -> Chain {
     parse(lex(input).expect("test input must lex")).expect("test input must parse")
+}
+
+pub fn parse_str(input: &str) -> Pipeline {
+    let mut chain = parse_chain(input);
+    assert_eq!(chain.pipelines.len(), 1, "input: {input:?}");
+    chain.pipelines.remove(0)
 }
 
 pub fn assert_rewrites(rule: Rule, cases: &[(&str, &str)]) {

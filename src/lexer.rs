@@ -21,6 +21,7 @@ pub enum Redirect {
 pub enum Token {
     Word(Word),
     Pipe,
+    And,
     Redirect(Redirect),
 }
 
@@ -50,6 +51,17 @@ pub fn lex(input: &str) -> Result<Vec<Token>, LexError> {
                     return Err(LexError::Unsupported);
                 }
                 tokens.push(Token::Pipe);
+            }
+            '&' => {
+                chars.next();
+                if !next_is(&mut chars, '&') {
+                    return Err(LexError::Unsupported);
+                }
+                chars.next();
+                if next_is(&mut chars, '&') {
+                    return Err(LexError::Unsupported);
+                }
+                tokens.push(Token::And);
             }
             '>' | '<' => tokens.push(Token::Redirect(lex_redirect(&mut chars, None)?)),
             '0'..='9' if input.as_bytes().get(start + 1) == Some(&b'>') => {
@@ -112,7 +124,7 @@ fn lex_dup(chars: &mut Chars, fd: Option<u8>) -> Result<Redirect, LexError> {
         _ => return Err(LexError::Unsupported),
     };
     match chars.peek() {
-        None | Some((_, ' ' | '\t' | '|')) => Ok(Redirect::Dup { fd, to }),
+        None | Some((_, ' ' | '\t' | '|' | '&')) => Ok(Redirect::Dup { fd, to }),
         Some(_) => Err(LexError::Unsupported),
     }
 }
@@ -122,7 +134,7 @@ fn lex_word(chars: &mut Chars) -> Result<Word, LexError> {
     let mut value = String::new();
     while let Some(&(_, c)) = chars.peek() {
         match c {
-            ' ' | '\t' | '|' | '<' | '>' => break,
+            ' ' | '\t' | '|' | '&' | '<' | '>' => break,
             '\'' | '"' => {
                 chars.next();
                 raw.push(c);
@@ -294,6 +306,24 @@ mod tests {
                 ],
             ),
             (
+                "cd src && ls",
+                vec![plain("cd"), plain("src"), Token::And, plain("ls")],
+            ),
+            ("a&&b", vec![plain("a"), Token::And, plain("b")]),
+            (
+                "ls 2>&1&&b",
+                vec![
+                    plain("ls"),
+                    r(Redirect::Dup { fd: 2, to: 1 }),
+                    Token::And,
+                    plain("b"),
+                ],
+            ),
+            (
+                "grep '&&' f",
+                vec![plain("grep"), w("'&&'", "&&"), plain("f")],
+            ),
+            (
                 "head -n 2 f",
                 vec![plain("head"), plain("-n"), plain("2"), plain("f")],
             ),
@@ -309,7 +339,11 @@ mod tests {
         let long = "a".repeat(MAX_LEN + 1);
         let cases = vec![
             (long.as_str(), TooLong),
-            ("a && b", Unsupported),
+            ("a & b", Unsupported),
+            ("a &", Unsupported),
+            ("a &&& b", Unsupported),
+            ("a&b", Unsupported),
+            ("ls 2>&1& b", Unsupported),
             ("a || b", Unsupported),
             ("echo =ls", Unsupported),
             ("echo \"$HOME\"", Unsupported),

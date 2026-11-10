@@ -5,7 +5,13 @@ mod testing;
 mod text;
 
 use crate::lexer::{Redirect, Word};
-use crate::parser::{Command, Pipeline, Redirection};
+use crate::parser::{Chain, Command, Pipeline, Redirection};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Suggestion {
+    pub chain: Chain,
+    pub explanation: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rewrite {
@@ -24,8 +30,20 @@ const RULES: &[Rule] = &[
     bundle_flags::check,
 ];
 
-pub fn rewrite(pipeline: &Pipeline) -> Option<Rewrite> {
-    RULES.iter().find_map(|rule| rule(pipeline))
+pub fn rewrite(chain: &Chain) -> Option<Suggestion> {
+    chain
+        .pipelines
+        .iter()
+        .enumerate()
+        .find_map(|(i, pipeline)| {
+            let rewrite = RULES.iter().find_map(|rule| rule(pipeline))?;
+            let mut pipelines = chain.pipelines.clone();
+            pipelines[i] = rewrite.pipeline;
+            Some(Suggestion {
+                chain: Chain { pipelines },
+                explanation: rewrite.explanation,
+            })
+        })
 }
 
 fn rewrite_each_stage(
@@ -122,7 +140,31 @@ fn is_process_dependent(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rules::testing::parse_str;
+    use crate::render::render;
+    use crate::rules::testing::{parse_chain, parse_str};
+
+    #[test]
+    fn rewrites_the_first_matching_pipeline_of_a_chain() {
+        let cases = [
+            ("cd src && cat f | grep x", "cd src && grep x f"),
+            ("cat f | grep x && ls", "grep x f && ls"),
+            (
+                "cat f | grep x && cat g | grep y",
+                "grep x f && cat g | grep y",
+            ),
+            (
+                "ls && sort f | uniq > out && cd ..",
+                "ls && sort -u f > out && cd ..",
+            ),
+        ];
+        for (input, expected) in cases {
+            let suggestion = rewrite(&parse_chain(input)).expect("input must be rewritten");
+            assert_eq!(render(&suggestion.chain), expected, "input: {input:?}");
+        }
+        for input in ["cd src && ls", "ls && cd .."] {
+            assert_eq!(rewrite(&parse_chain(input)), None, "input: {input:?}");
+        }
+    }
 
     #[test]
     fn accepts_output_redirects_to_other_files() {

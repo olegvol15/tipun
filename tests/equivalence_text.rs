@@ -287,3 +287,15 @@ fn harmless_grep_alias_options_keep_suggestions_equivalent() {
     }
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
+
+#[test]
+fn rewrites_inside_and_chains_match_the_original() {
+    let originals = [
+        "cd src && cat main.txt | grep line",
+        "cat app.log | grep ERROR > errors.txt && wc -l < errors.txt",
+        "mkdir out && cat app.log | sort | uniq > out/sorted.txt",
+        "touch new.txt && ls -l -a src && cat app.log | wc -l",
+        "cat app.log | grep warn && cat 'my file.txt' | grep line",
+    ];
+    assert_same_files("chain", &originals);
+}
