@@ -105,7 +105,7 @@ fn one_cd_climbs_to_the_same_directory() {
         ("zsh", "setopt chase_links; "),
         ("zsh", "setopt chase_dots; "),
         ("sh", ""),
-        ("sh", "set -P; "),
+        ("bash", "set -P; "),
     ];
     for original in originals {
         let suggestion = suggest(original).expect("tipun must suggest a rewrite");
