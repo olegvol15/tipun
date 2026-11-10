@@ -53,7 +53,8 @@ Every rule MUST have:
 Known traps: `wc FILE` prints the filename (use `wc < FILE`); `sort -u` is not `sort | uniq` with
 `-f`/`-n`/`-k`; `grep -c` is not `grep | wc -l` with `-o` or context flags; `grep -r` with no file
 searches cwd; `tail -f`; `uniq A B` writes to B; `tr` takes no files; `cd foo` uses `CDPATH`;
-aliases (`cat` -> `bat`) and prefixes (`sudo`, `time`).
+aliases (`cat` -> `bat`) and prefixes (`sudo`, `time`); builtins earlier in a chain (`exec > out`, `set`,
+`export`) that change how later commands run.
 
 ## CLI
 

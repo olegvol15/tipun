@@ -299,3 +299,21 @@ fn rewrites_inside_and_chains_match_the_original() {
     ];
     assert_same_files("chain", &originals);
 }
+
+#[test]
+fn rules_stay_silent_after_exec_redirects_later_output() {
+    let dir = fixtures("exec-redirect");
+    let original = "exec > out && grep ERROR app.log | wc -l";
+    let rewrite = "exec > out && grep -c ERROR app.log";
+    assert_eq!(suggest(original), None);
+    let written = |command: &str| {
+        sh(&dir, command);
+        fs::read(dir.join("out")).expect("read out")
+    };
+    let (expected, actual) = (written(original), written(rewrite));
+    if cfg!(target_os = "macos") {
+        assert_ne!(actual, expected, "BSD wc pads the count written to out");
+    }
+    assert_eq!(String::from_utf8_lossy(&expected).trim(), "2");
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}

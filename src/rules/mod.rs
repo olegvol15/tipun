@@ -32,10 +32,56 @@ const RULES: &[Rule] = &[
 // These may change the exit status, which decides whether the rest of an `&&` chain runs.
 const LAST_PIPELINE_RULES: &[Rule] = &[text::grep_count::check];
 
+// Builtins that change how later commands run (`exec > out` redirects everything after it), so
+// rules, which only see their own pipeline, stop at the first one.
+const SHELL_STATE_BUILTINS: &[&str] = &[
+    ".",
+    "alias",
+    "autoload",
+    "builtin",
+    "command",
+    "declare",
+    "disable",
+    "emulate",
+    "enable",
+    "eval",
+    "exec",
+    "export",
+    "float",
+    "functions",
+    "hash",
+    "integer",
+    "limit",
+    "local",
+    "nocorrect",
+    "noglob",
+    "readonly",
+    "rehash",
+    "set",
+    "setopt",
+    "shopt",
+    "source",
+    "trap",
+    "typeset",
+    "ulimit",
+    "umask",
+    "unalias",
+    "unfunction",
+    "unhash",
+    "unlimit",
+    "unset",
+    "unsetopt",
+    "zmodload",
+];
+
 pub fn rewrite(chain: &Chain) -> Option<Suggestion> {
     let last = chain.pipelines.len().saturating_sub(1);
-    chain
+    let unchanged_state = chain
         .pipelines
+        .iter()
+        .position(changes_shell_state)
+        .unwrap_or(chain.pipelines.len());
+    chain.pipelines[..unchanged_state]
         .iter()
         .enumerate()
         .find_map(|(i, pipeline)| {
@@ -51,6 +97,13 @@ pub fn rewrite(chain: &Chain) -> Option<Suggestion> {
                 explanation: rewrite.explanation,
             })
         })
+}
+
+fn changes_shell_state(pipeline: &Pipeline) -> bool {
+    pipeline
+        .stages
+        .iter()
+        .any(|stage| SHELL_STATE_BUILTINS.contains(&stage.name.value.as_str()))
 }
 
 fn rewrite_each_stage(
@@ -168,6 +221,8 @@ mod tests {
                 "grep x f | wc -l && cat f | grep y",
                 "grep x f | wc -l && grep y f",
             ),
+            ("cat f | grep x && exec > out", "grep x f && exec > out"),
+            ("echo exec && cat f | grep x", "echo exec && grep x f"),
         ];
         for (input, expected) in cases {
             let suggestion = rewrite(&parse_chain(input)).expect("input must be rewritten");
@@ -178,6 +233,13 @@ mod tests {
             "ls && cd ..",
             "grep x f | wc -l && touch marker",
             "grep x f | wc -l && ls && cd ..",
+            "exec > out && grep x f | wc -l",
+            "exec > out && cat f | grep x",
+            "builtin exec > out && cat f | grep x",
+            "setopt sh_word_split && cat f | grep x",
+            "export LC_ALL=C && sort f | uniq",
+            "cd src && alias cat=bat && cat f | grep x",
+            "ls | exec cat > out && cat f | grep x",
         ];
         for input in silent {
             assert_eq!(rewrite(&parse_chain(input)), None, "input: {input:?}");
