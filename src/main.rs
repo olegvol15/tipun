@@ -14,8 +14,8 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 
 use lexer::{Redirect, Word};
-use parser::Pipeline;
-use rules::Rewrite;
+use parser::Chain;
+use rules::Suggestion;
 
 #[derive(Parser)]
 #[command(name = "tipun", version)]
@@ -116,7 +116,7 @@ fn update(quiet: bool) -> ExitCode {
 fn suggest(command: &str) -> ExitCode {
     match find_rewrite(command) {
         Some(rewrite) => {
-            println!("{}", render::render(&rewrite.pipeline));
+            println!("{}", render::render(&rewrite.chain));
             ExitCode::SUCCESS
         }
         None => ExitCode::from(1),
@@ -146,7 +146,7 @@ fn analyze(command: &str, expanded: Option<&str>, exit_code: i32, columns: Optio
         }
         return;
     }
-    let suggestion = render::render(&rewrite.pipeline);
+    let suggestion = render::render(&rewrite.chain);
     eprint!(
         "{}",
         tip::render(&suggestion, &rewrite.explanation, terminal(columns))
@@ -165,7 +165,7 @@ fn terminal(columns: Option<&str>) -> Option<tip::Terminal> {
     })
 }
 
-fn find_rewrite(command: &str) -> Option<Rewrite> {
+fn find_rewrite(command: &str) -> Option<Suggestion> {
     let tokens = match lexer::lex(command) {
         Ok(tokens) => tokens,
         Err(err) => {
@@ -175,8 +175,8 @@ fn find_rewrite(command: &str) -> Option<Rewrite> {
             return None;
         }
     };
-    let pipeline = match parser::parse(tokens) {
-        Ok(pipeline) => pipeline,
+    let chain = match parser::parse(tokens) {
+        Ok(chain) => chain,
         Err(err) => {
             if debug() {
                 eprintln!("parse error: {err:?}");
@@ -185,36 +185,42 @@ fn find_rewrite(command: &str) -> Option<Rewrite> {
         }
     };
     if debug() {
-        print_pipeline(&pipeline);
+        print_chain(&chain);
     }
-    rules::rewrite(&pipeline)
+    rules::rewrite(&chain)
 }
 
 fn debug() -> bool {
     env::var_os("TIPUN_DEBUG").is_some_and(|v| v == "1")
 }
 
-fn print_pipeline(pipeline: &Pipeline) {
-    for (i, stage) in pipeline.stages.iter().enumerate() {
-        eprintln!("stage {}", i + 1);
-        eprintln!("  name {}", describe(&stage.name));
-        for arg in &stage.args {
-            eprintln!("  arg {}", describe(arg));
-        }
-        for redirect in &stage.redirects {
-            let op = match redirect.op {
-                Redirect::Out { fd } => format!("out fd={fd:?}"),
-                Redirect::Append { fd } => format!("append fd={fd:?}"),
-                Redirect::In => "in".to_string(),
-                Redirect::Dup { fd, to } => format!("dup {fd}>&{to}"),
-            };
-            match &redirect.target {
-                Some(target) => eprintln!("  redirect {op} target {}", describe(target)),
-                None => eprintln!("  redirect {op}"),
-            }
+fn print_chain(chain: &Chain) {
+    for (p, pipeline) in chain.pipelines.iter().enumerate() {
+        for (i, stage) in pipeline.stages.iter().enumerate() {
+            eprintln!("pipeline {} stage {}", p + 1, i + 1);
+            print_command(stage);
         }
     }
-    eprintln!("rendered {}", render::render(pipeline));
+    eprintln!("rendered {}", render::render(chain));
+}
+
+fn print_command(stage: &parser::Command) {
+    eprintln!("  name {}", describe(&stage.name));
+    for arg in &stage.args {
+        eprintln!("  arg {}", describe(arg));
+    }
+    for redirect in &stage.redirects {
+        let op = match redirect.op {
+            Redirect::Out { fd } => format!("out fd={fd:?}"),
+            Redirect::Append { fd } => format!("append fd={fd:?}"),
+            Redirect::In => "in".to_string(),
+            Redirect::Dup { fd, to } => format!("dup {fd}>&{to}"),
+        };
+        match &redirect.target {
+            Some(target) => eprintln!("  redirect {op} target {}", describe(target)),
+            None => eprintln!("  redirect {op}"),
+        }
+    }
 }
 
 fn describe(word: &Word) -> String {

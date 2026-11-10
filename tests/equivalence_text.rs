@@ -287,3 +287,77 @@ fn harmless_grep_alias_options_keep_suggestions_equivalent() {
     }
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
+
+#[test]
+fn rewrites_inside_and_chains_match_the_original() {
+    let originals = [
+        "cd src && cat main.txt | grep line",
+        "cat app.log | grep ERROR > errors.txt && ls -l -a errors.txt",
+        "mkdir out && cat app.log | sort | uniq > out/sorted.txt",
+        "touch new.txt && ls -l -a src && cat app.log | wc -l",
+        "cat app.log | grep warn && cat 'my file.txt' | grep line",
+    ];
+    assert_same_files("chain", &originals);
+}
+
+#[test]
+fn merged_stages_stay_silent_before_the_end_of_a_chain() {
+    let dir = fixtures("chain-error-path");
+    let cases = [
+        (
+            "sort missing.txt | uniq && touch continued",
+            "sort -u missing.txt && touch continued",
+        ),
+        (
+            "cat missing.txt | sort && touch continued",
+            "sort missing.txt && touch continued",
+        ),
+    ];
+    for (original, rewrite) in cases {
+        assert_eq!(suggest(original), None, "original: {original:?}");
+        assert_eq!(
+            sh(&dir, original).status.code(),
+            Some(0),
+            "original: {original:?}"
+        );
+        assert!(
+            dir.join("continued").exists(),
+            "{original:?} runs the rest of the chain"
+        );
+        fs::remove_file(dir.join("continued")).expect("remove marker");
+        assert_ne!(
+            sh(&dir, rewrite).status.code(),
+            Some(0),
+            "rewrite: {rewrite:?}"
+        );
+        assert!(
+            !dir.join("continued").exists(),
+            "{rewrite:?} skips the rest of the chain"
+        );
+    }
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[test]
+fn rules_stay_silent_after_exec_redirects_later_output() {
+    let dir = fixtures("exec-redirect");
+    let written = |command: &str| {
+        let output = zsh(&dir, command);
+        assert!(output.is_empty(), "{command:?} writes to out, not stdout");
+        fs::read(dir.join("out")).expect("read out")
+    };
+    for prefix in ["", "time "] {
+        let original = format!("{prefix}exec > out && grep ERROR app.log | wc -l");
+        let rewrite = format!("{prefix}exec > out && grep -c ERROR app.log");
+        assert_eq!(suggest(&original), None, "original: {original:?}");
+        let (expected, actual) = (written(&original), written(&rewrite));
+        if cfg!(target_os = "macos") {
+            assert_ne!(
+                actual, expected,
+                "BSD wc pads the count written by {original:?}"
+            );
+        }
+        assert_eq!(String::from_utf8_lossy(&expected).trim(), "2");
+    }
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}

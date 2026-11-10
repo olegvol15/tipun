@@ -1,7 +1,12 @@
 use crate::lexer::Redirect;
-use crate::parser::{Command, Pipeline, Redirection};
+use crate::parser::{Chain, Command, Pipeline, Redirection};
 
-pub fn render(pipeline: &Pipeline) -> String {
+pub fn render(chain: &Chain) -> String {
+    let pipelines: Vec<String> = chain.pipelines.iter().map(render_pipeline).collect();
+    pipelines.join(" && ")
+}
+
+pub fn render_pipeline(pipeline: &Pipeline) -> String {
     let stages: Vec<String> = pipeline.stages.iter().map(render_command).collect();
     stages.join(" | ")
 }
@@ -36,7 +41,7 @@ mod tests {
     use crate::lexer::lex;
     use crate::parser::parse;
 
-    fn parse_str(input: &str) -> Pipeline {
+    fn parse_str(input: &str) -> Chain {
         parse(lex(input).expect("test input must lex")).expect("test input must parse")
     }
 
@@ -62,6 +67,9 @@ mod tests {
             ("grep '' f", "grep '' f"),
             ("echo 2 >f", "echo 2 > f"),
             ("grep ü f", "grep ü f"),
+            ("cd src&&ls", "cd src && ls"),
+            ("a | b&&c >f  &&  d", "a | b && c > f && d"),
+            ("grep '&&' f", "grep '&&' f"),
         ];
         for (input, expected) in cases {
             assert_eq!(render(&parse_str(input)), expected, "input: {input:?}");
@@ -85,11 +93,13 @@ mod tests {
             "grep a=b f",
             "grep '|' f",
             "grep \">\" f",
+            "cd src && cat f | grep x > out && wc -l < out",
+            "grep '&&' f && ls",
         ];
         for input in inputs {
-            let pipeline = parse_str(input);
-            let rendered = render(&pipeline);
-            assert_eq!(parse_str(&rendered), pipeline, "input: {input:?}");
+            let chain = parse_str(input);
+            let rendered = render(&chain);
+            assert_eq!(parse_str(&rendered), chain, "input: {input:?}");
         }
     }
 }

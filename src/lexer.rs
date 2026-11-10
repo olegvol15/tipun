@@ -21,6 +21,7 @@ pub enum Redirect {
 pub enum Token {
     Word(Word),
     Pipe,
+    And,
     Redirect(Redirect),
 }
 
@@ -50,6 +51,17 @@ pub fn lex(input: &str) -> Result<Vec<Token>, LexError> {
                     return Err(LexError::Unsupported);
                 }
                 tokens.push(Token::Pipe);
+            }
+            '&' => {
+                chars.next();
+                if !next_is(&mut chars, '&') {
+                    return Err(LexError::Unsupported);
+                }
+                chars.next();
+                if next_is(&mut chars, '&') {
+                    return Err(LexError::Unsupported);
+                }
+                tokens.push(Token::And);
             }
             '>' | '<' => tokens.push(Token::Redirect(lex_redirect(&mut chars, None)?)),
             '0'..='9' if input.as_bytes().get(start + 1) == Some(&b'>') => {
@@ -112,7 +124,7 @@ fn lex_dup(chars: &mut Chars, fd: Option<u8>) -> Result<Redirect, LexError> {
         _ => return Err(LexError::Unsupported),
     };
     match chars.peek() {
-        None | Some((_, ' ' | '\t' | '|')) => Ok(Redirect::Dup { fd, to }),
+        None | Some((_, ' ' | '\t' | '|' | '&')) => Ok(Redirect::Dup { fd, to }),
         Some(_) => Err(LexError::Unsupported),
     }
 }
@@ -122,7 +134,7 @@ fn lex_word(chars: &mut Chars) -> Result<Word, LexError> {
     let mut value = String::new();
     while let Some(&(_, c)) = chars.peek() {
         match c {
-            ' ' | '\t' | '|' | '<' | '>' => break,
+            ' ' | '\t' | '|' | '&' | '<' | '>' => break,
             '\'' | '"' => {
                 chars.next();
                 raw.push(c);
@@ -153,7 +165,7 @@ fn lex_quoted(
                 raw.push(c);
                 return Ok(());
             }
-            Some((_, '\n')) => return Err(LexError::Unsupported),
+            Some((_, c)) if c != '\t' && is_hidden(c) => return Err(LexError::Unsupported),
             Some((_, '$' | '`' | '\\' | '!')) if quote == '"' => {
                 return Err(LexError::Unsupported);
             }
@@ -166,7 +178,14 @@ fn lex_quoted(
 }
 
 fn is_word_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || "-_./:,=+@%".contains(c) || !c.is_ascii()
+    c.is_ascii_alphanumeric() || "-_./:,=+@%".contains(c) || (!c.is_ascii() && !is_hidden(c))
+}
+
+// The suggestion is printed to the terminal, so escape sequences and bidi overrides could
+// rewrite what the user sees.
+fn is_hidden(c: char) -> bool {
+    c.is_control()
+        || matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
 }
 
 #[cfg(test)]
@@ -294,6 +313,24 @@ mod tests {
                 ],
             ),
             (
+                "cd src && ls",
+                vec![plain("cd"), plain("src"), Token::And, plain("ls")],
+            ),
+            ("a&&b", vec![plain("a"), Token::And, plain("b")]),
+            (
+                "ls 2>&1&&b",
+                vec![
+                    plain("ls"),
+                    r(Redirect::Dup { fd: 2, to: 1 }),
+                    Token::And,
+                    plain("b"),
+                ],
+            ),
+            (
+                "grep '&&' f",
+                vec![plain("grep"), w("'&&'", "&&"), plain("f")],
+            ),
+            (
                 "head -n 2 f",
                 vec![plain("head"), plain("-n"), plain("2"), plain("f")],
             ),
@@ -309,7 +346,11 @@ mod tests {
         let long = "a".repeat(MAX_LEN + 1);
         let cases = vec![
             (long.as_str(), TooLong),
-            ("a && b", Unsupported),
+            ("a & b", Unsupported),
+            ("a &", Unsupported),
+            ("a &&& b", Unsupported),
+            ("a&b", Unsupported),
+            ("ls 2>&1& b", Unsupported),
             ("a || b", Unsupported),
             ("echo =ls", Unsupported),
             ("echo \"$HOME\"", Unsupported),
@@ -349,6 +390,28 @@ mod tests {
                 assert_eq!(lex(&input), Err(LexError::Unsupported), "input: {input:?}");
             }
         }
+    }
+
+    #[test]
+    fn rejects_terminal_control_characters() {
+        let chars = [
+            '\x1b', '\x07', '\x08', '\r', '\0', '\x7f', '\u{9b}', '\u{85}', '\u{200f}', '\u{202e}',
+            '\u{2066}', '\u{2069}',
+        ];
+        for c in chars {
+            let inputs = [
+                format!("grep a{c}b f"),
+                format!("grep 'a{c}b' f"),
+                format!("grep \"a{c}b\" f"),
+            ];
+            for input in inputs {
+                assert_eq!(lex(&input), Err(LexError::Unsupported), "input: {input:?}");
+            }
+        }
+        assert_eq!(
+            lex("grep 'a\tb' f"),
+            Ok(vec![plain("grep"), w("'a\tb'", "a\tb"), plain("f")])
+        );
     }
 
     #[test]

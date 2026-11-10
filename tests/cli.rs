@@ -110,11 +110,25 @@ fn suggest_prints_the_rewrite() {
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stdout, b"grep ERROR 'my file'\n");
     assert!(output.stderr.is_empty());
+    let output = tipun(&["suggest", "cd src&&cat f | grep x"]);
+    assert_eq!(output.stdout, b"cd src && grep x f\n");
 }
 
 #[test]
 fn suggest_is_silent_without_a_rewrite() {
-    for command in ["ls | grep x", "echo $HOME", "", "FOO=1 cat f", "ls >"] {
+    let commands = [
+        "ls | grep x",
+        "echo $HOME",
+        "",
+        "FOO=1 cat f",
+        "ls >",
+        "cd src && ls",
+        "cd src; cat f | grep x",
+        "false || cat f | grep x",
+        "cat f | grep x &",
+        "cd src &&",
+    ];
+    for command in commands {
         let output = tipun(&["suggest", command]);
         assert_eq!(output.status.code(), Some(1), "command: {command:?}");
         assert!(output.stdout.is_empty(), "command: {command:?}");
@@ -203,8 +217,10 @@ fn init_rejects_unknown_shells() {
 #[test]
 fn analyze_is_silent_and_exits_zero() {
     let command = "cat app.log | grep ERROR";
-    let cases: [(&[&str], Vars); 9] = [
+    let clear_screen = "cat app.log | grep '\x1b[2J\x1b[H'";
+    let cases: [(&[&str], Vars); 10] = [
         (&["analyze", "--command", "ls | grep x"], &[]),
+        (&["analyze", "--command", clear_screen], &[]),
         (&["analyze", "--command", "echo $HOME"], &[]),
         (&["analyze", "--command", ""], &[]),
         (&["analyze", "--command", "-rf"], &[]),

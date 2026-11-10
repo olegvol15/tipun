@@ -3,6 +3,11 @@ use std::mem;
 use crate::lexer::{Redirect, Token, Word};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Chain {
+    pub pipelines: Vec<Pipeline>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pipeline {
     pub stages: Vec<Command>,
 }
@@ -28,10 +33,11 @@ pub enum ParseError {
     AssignmentPrefix,
 }
 
-pub fn parse(tokens: Vec<Token>) -> Result<Pipeline, ParseError> {
+pub fn parse(tokens: Vec<Token>) -> Result<Chain, ParseError> {
     if tokens.is_empty() {
         return Err(ParseError::Empty);
     }
+    let mut pipelines = Vec::new();
     let mut stages = Vec::new();
     let mut words = Vec::new();
     let mut redirects = Vec::new();
@@ -42,6 +48,13 @@ pub fn parse(tokens: Vec<Token>) -> Result<Pipeline, ParseError> {
             Token::Pipe => {
                 let stage = finish_stage(mem::take(&mut words), mem::take(&mut redirects))?;
                 stages.push(stage);
+            }
+            Token::And => {
+                let stage = finish_stage(mem::take(&mut words), mem::take(&mut redirects))?;
+                stages.push(stage);
+                pipelines.push(Pipeline {
+                    stages: mem::take(&mut stages),
+                });
             }
             Token::Redirect(op) => {
                 let target = match op {
@@ -58,7 +71,8 @@ pub fn parse(tokens: Vec<Token>) -> Result<Pipeline, ParseError> {
         }
     }
     stages.push(finish_stage(words, redirects)?);
-    Ok(Pipeline { stages })
+    pipelines.push(Pipeline { stages });
+    Ok(Chain { pipelines })
 }
 
 fn finish_stage(words: Vec<Word>, redirects: Vec<Redirection>) -> Result<Command, ParseError> {
@@ -79,8 +93,14 @@ mod tests {
     use super::*;
     use crate::lexer::lex;
 
-    fn parse_str(input: &str) -> Result<Pipeline, ParseError> {
+    fn parse_str(input: &str) -> Result<Chain, ParseError> {
         parse(lex(input).expect("test input must lex"))
+    }
+
+    fn single(stages: Vec<Command>) -> Chain {
+        Chain {
+            pipelines: vec![Pipeline { stages }],
+        }
     }
 
     fn w(raw: &str, value: &str) -> Word {
@@ -173,9 +193,47 @@ mod tests {
             ("grep a=b f", vec![cmd("grep", &["a=b", "f"], vec![])]),
         ];
         for (input, stages) in cases {
+            assert_eq!(parse_str(input), Ok(single(stages)), "input: {input:?}");
+        }
+    }
+
+    #[test]
+    fn parses_and_chains() {
+        let cases = vec![
+            (
+                "cd src && ls",
+                vec![
+                    vec![cmd("cd", &["src"], vec![])],
+                    vec![cmd("ls", &[], vec![])],
+                ],
+            ),
+            (
+                "cat f | grep x > out && wc -l < out && ls",
+                vec![
+                    vec![
+                        cmd("cat", &["f"], vec![]),
+                        cmd("grep", &["x"], vec![to(OUT, "out")]),
+                    ],
+                    vec![cmd("wc", &["-l"], vec![to(Redirect::In, "out")])],
+                    vec![cmd("ls", &[], vec![])],
+                ],
+            ),
+            (
+                "ls 2>&1 && ls",
+                vec![
+                    vec![cmd("ls", &[], vec![dup(2, 1)])],
+                    vec![cmd("ls", &[], vec![])],
+                ],
+            ),
+        ];
+        for (input, pipelines) in cases {
+            let pipelines = pipelines
+                .into_iter()
+                .map(|stages| Pipeline { stages })
+                .collect();
             assert_eq!(
                 parse_str(input),
-                Ok(Pipeline { stages }),
+                Ok(Chain { pipelines }),
                 "input: {input:?}"
             );
         }
@@ -183,16 +241,14 @@ mod tests {
 
     #[test]
     fn keeps_quoted_words() {
-        let expected = Pipeline {
-            stages: vec![Command {
-                name: plain("grep"),
-                args: vec![w("\"a b\"", "a b")],
-                redirects: vec![Redirection {
-                    op: OUT,
-                    target: Some(w("'my file'", "my file")),
-                }],
+        let expected = single(vec![Command {
+            name: plain("grep"),
+            args: vec![w("\"a b\"", "a b")],
+            redirects: vec![Redirection {
+                op: OUT,
+                target: Some(w("'my file'", "my file")),
             }],
-        };
+        }]);
         assert_eq!(parse_str("grep \"a b\" > 'my file'"), Ok(expected));
     }
 
@@ -212,6 +268,13 @@ mod tests {
             ("ls > > f", MissingTarget),
             ("ls > 2>&1", MissingTarget),
             ("cat <", MissingTarget),
+            ("a &&", EmptyStage),
+            ("&& a", EmptyStage),
+            ("a && && b", EmptyStage),
+            ("a | && b", EmptyStage),
+            ("a && | b", EmptyStage),
+            ("ls > && b", MissingTarget),
+            ("a && FOO=1 b", AssignmentPrefix),
             ("FOO=1 cat f", AssignmentPrefix),
             ("cat f | LC_ALL=C sort", AssignmentPrefix),
             ("> out FOO=1 cat f", AssignmentPrefix),

@@ -5,7 +5,13 @@ mod testing;
 mod text;
 
 use crate::lexer::{Redirect, Word};
-use crate::parser::{Command, Pipeline, Redirection};
+use crate::parser::{Chain, Command, Pipeline, Redirection};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Suggestion {
+    pub chain: Chain,
+    pub explanation: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rewrite {
@@ -15,17 +21,95 @@ pub struct Rewrite {
 
 type Rule = fn(&Pipeline) -> Option<Rewrite>;
 
-const RULES: &[Rule] = &[
+const RULES: &[Rule] = &[git::checkout::check, git::stash::check, bundle_flags::check];
+
+// These may change the exit status, which decides whether the rest of an `&&` chain runs. Merging
+// stages does: `cat missing | sort` exits 0 with sort's status, `sort missing` exits 2.
+const LAST_PIPELINE_RULES: &[Rule] = &[
     text::useless_cat::check,
     text::sort_uniq::check,
     text::grep_count::check,
-    git::checkout::check,
-    git::stash::check,
-    bundle_flags::check,
 ];
 
-pub fn rewrite(pipeline: &Pipeline) -> Option<Rewrite> {
-    RULES.iter().find_map(|rule| rule(pipeline))
+// Builtins that change how later commands run (`exec > out` redirects everything after it), and
+// prefixes that run a builtin in this shell (`time exec`). Rules only see their own pipeline, so
+// they stop at the first one.
+const SHELL_STATE_BUILTINS: &[&str] = &[
+    "-",
+    ".",
+    "alias",
+    "autoload",
+    "builtin",
+    "command",
+    "coproc",
+    "declare",
+    "disable",
+    "emulate",
+    "enable",
+    "eval",
+    "exec",
+    "export",
+    "fc",
+    "float",
+    "functions",
+    "hash",
+    "integer",
+    "limit",
+    "local",
+    "nocorrect",
+    "noglob",
+    "r",
+    "readonly",
+    "repeat",
+    "rehash",
+    "set",
+    "setopt",
+    "shopt",
+    "source",
+    "time",
+    "trap",
+    "typeset",
+    "ulimit",
+    "umask",
+    "unalias",
+    "unfunction",
+    "unhash",
+    "unlimit",
+    "unset",
+    "unsetopt",
+    "zmodload",
+];
+
+pub fn rewrite(chain: &Chain) -> Option<Suggestion> {
+    let last = chain.pipelines.len().saturating_sub(1);
+    let unchanged_state = chain
+        .pipelines
+        .iter()
+        .position(changes_shell_state)
+        .unwrap_or(chain.pipelines.len());
+    chain.pipelines[..unchanged_state]
+        .iter()
+        .enumerate()
+        .find_map(|(i, pipeline)| {
+            let last_only = LAST_PIPELINE_RULES.iter().filter(|_| i == last);
+            let rewrite = RULES
+                .iter()
+                .chain(last_only)
+                .find_map(|rule| rule(pipeline))?;
+            let mut pipelines = chain.pipelines.clone();
+            pipelines[i] = rewrite.pipeline;
+            Some(Suggestion {
+                chain: Chain { pipelines },
+                explanation: rewrite.explanation,
+            })
+        })
+}
+
+fn changes_shell_state(pipeline: &Pipeline) -> bool {
+    pipeline
+        .stages
+        .iter()
+        .any(|stage| SHELL_STATE_BUILTINS.contains(&stage.name.value.as_str()))
 }
 
 fn rewrite_each_stage(
@@ -122,7 +206,57 @@ fn is_process_dependent(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rules::testing::parse_str;
+    use crate::render::render;
+    use crate::rules::testing::{parse_chain, parse_str};
+
+    #[test]
+    fn rewrites_the_first_matching_pipeline_of_a_chain() {
+        let cases = [
+            ("cd src && cat f | grep x", "cd src && grep x f"),
+            (
+                "cat f | grep x && cat g | grep y",
+                "cat f | grep x && grep y g",
+            ),
+            ("ls && sort f | uniq > out", "ls && sort -u f > out"),
+            ("cd src && grep x f | wc -l", "cd src && grep -c x f"),
+            (
+                "grep x f | wc -l && cat f | grep y",
+                "grep x f | wc -l && grep y f",
+            ),
+            ("ls -l -a && cat f | grep x", "ls -la && cat f | grep x"),
+            ("git checkout -b x && ls", "git switch -c x && ls"),
+            ("ls -l -a && exec > out", "ls -la && exec > out"),
+            ("echo exec && cat f | grep x", "echo exec && grep x f"),
+        ];
+        for (input, expected) in cases {
+            let suggestion = rewrite(&parse_chain(input)).expect("input must be rewritten");
+            assert_eq!(render(&suggestion.chain), expected, "input: {input:?}");
+        }
+        let silent = [
+            "cd src && ls",
+            "ls && cd ..",
+            "grep x f | wc -l && touch marker",
+            "cat f | grep x && ls",
+            "cat missing | sort && touch marker",
+            "sort missing | uniq && echo continued",
+            "fc -e - exec && grep x f | wc -l",
+            "r exec && cat f | grep x",
+            "grep x f | wc -l && ls && cd ..",
+            "exec > out && grep x f | wc -l",
+            "exec > out && cat f | grep x",
+            "builtin exec > out && cat f | grep x",
+            "time exec > out && grep x f | wc -l",
+            "repeat 1 exec > out && cat f | grep x",
+            "- exec > out && cat f | grep x",
+            "setopt sh_word_split && cat f | grep x",
+            "export LC_ALL=C && sort f | uniq",
+            "cd src && alias cat=bat && cat f | grep x",
+            "ls | exec cat > out && cat f | grep x",
+        ];
+        for input in silent {
+            assert_eq!(rewrite(&parse_chain(input)), None, "input: {input:?}");
+        }
+    }
 
     #[test]
     fn accepts_output_redirects_to_other_files() {

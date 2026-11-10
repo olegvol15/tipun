@@ -5,9 +5,11 @@ description: Add a new command-rewrite rule to tipun safely, with its preconditi
 
 # Add rule
 
-A rule turns a parsed `Pipeline` into a better `Pipeline`, or returns `None`. A wrong suggestion
-destroys trust, so every rule must prove its preconditions. Read the "Rule safety" section of
-`CLAUDE.md` first.
+A rule turns a parsed `Pipeline` into a better `Pipeline`, or returns `None`. In an `&&` chain,
+`rules::rewrite` tries the rules on each pipeline up to the first shell-state builtin (`exec`,
+`set`, `export`, ...) and rewrites only the first match; rules in `LAST_PIPELINE_RULES` only see
+the last pipeline. A wrong suggestion destroys trust, so every rule must prove its preconditions.
+Read the "Rule safety" section of `CLAUDE.md` first.
 
 If `src/rules/` does not exist yet, stop and tell the user the parser and rules milestones come
 first.
@@ -48,7 +50,9 @@ Also check that the suggestion parses again and that the rule returns `None` on 
   exists; do not add a global capability table.
 - Build the new pipeline from the original words' `raw` text so quoting is preserved; only
   inserted words (like `-c`) are new.
-- Register the rule in the `RULES` list, ordered by priority.
+- Register the rule in the `RULES` list, ordered by priority. A rule whose suggestion can exit
+  with a different status, even on an error path, goes in `LAST_PIPELINE_RULES`: in `a && b`, the
+  status decides if `b` runs. Merging pipeline stages always can (`cat missing | sort` exits 0).
 - Write a short, plain explanation string for the tip (no emoji).
 
 ## 4. Differential test

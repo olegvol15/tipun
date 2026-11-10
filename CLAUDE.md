@@ -20,15 +20,19 @@ occasionally suggests a cleaner way to write the same command, e.g.
 ```
 zsh adapter (thin: captures raw command, alias-expanded command, exit code)
   -> tipun analyze
-  -> lexer -> parser -> Pipeline AST
-  -> rules: fn(&Pipeline) -> Option<Rewrite>   (pure, no I/O)
+  -> lexer -> parser -> Chain of pipelines (joined by &&)
+  -> rules: fn(&Pipeline) -> Option<Rewrite>   (pure, no I/O), tried on each pipeline up to
+     the first shell-state builtin; rules that merge stages only on the last one
   -> one short tip on stderr
 ```
 
 - The core never depends on zsh concepts. The shell adapter makes no rule decisions.
 - **The parser is hand-written and fail-closed.** It accepts only a small whitelisted subset (plain
-  words, single/double quotes without expansions, `|`, `>`, `>>`, `<`, `n>`, `n>&m`). Anything else
-  makes the whole command unsupported, and tipun stays silent. No regex-based matching.
+  words, single/double quotes without expansions, `|`, `&&`, `>`, `>>`, `<`, `n>`, `n>&m`).
+  Anything else makes the whole command unsupported, and tipun stays silent. No regex-based
+  matching. `;`, `||` and `&` stay unsupported: `a; b` runs `b` even when `a` fails.
+  Control characters and bidi overrides are rejected, so a printed suggestion cannot drive the
+  terminal.
 - Words keep both `raw` (as typed, quotes included) and `value` (unquoted). Suggestions are
   rendered from `raw` so the user's quoting is preserved.
 - Rules are plain functions in a static list. Command knowledge stays local to each rule; there is
@@ -51,7 +55,9 @@ Every rule MUST have:
 Known traps: `wc FILE` prints the filename (use `wc < FILE`); `sort -u` is not `sort | uniq` with
 `-f`/`-n`/`-k`; `grep -c` is not `grep | wc -l` with `-o` or context flags; `grep -r` with no file
 searches cwd; `tail -f`; `uniq A B` writes to B; `tr` takes no files; `cd foo` uses `CDPATH`;
-aliases (`cat` -> `bat`) and prefixes (`sudo`, `time`).
+aliases (`cat` -> `bat`) and prefixes (`sudo`, `time`); builtins earlier in a chain
+(`exec > out`, `set`, `export`) that change how later commands run; merged stages in a chain
+(`cat missing | sort && b` runs `b`, `sort missing && b` does not).
 
 ## CLI
 

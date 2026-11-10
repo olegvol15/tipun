@@ -25,7 +25,8 @@ Assume the rule is wrong and try to prove it. A single wrong suggestion breaks t
    - redirections: on which stage, `2>&1` placement, input redirects that override the pipe,
      zsh MULTIOS (`> a > b`)
    - quoting: quoted names with spaces, empty strings, quotes containing `|` or `>`
-   - pipeline position: matched stages in the middle, extra stages before or after
+   - pipeline position: matched stages in the middle, extra stages before or after, and the
+     pipeline inside an `&&` chain (`cd dir && ...`)
    - environment: aliases and prefixes (`sudo`, `time`, `command`), BSD vs GNU tools, locale
    - output format: padding, trailing newline, exit status on zero matches
 4. Verify each candidate rather than guessing: run `tipun suggest` on it, and run the original and
