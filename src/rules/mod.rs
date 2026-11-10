@@ -1,4 +1,5 @@
 mod bundle_flags;
+mod cd_parent;
 mod git;
 mod merge_repeated;
 #[cfg(test)]
@@ -21,9 +22,10 @@ pub struct Rewrite {
 }
 
 type Rule = fn(&Pipeline) -> Option<Rewrite>;
-type ChainRule = fn(&Chain) -> Option<Suggestion>;
+// A chain rule may only rewrite the first `usable` pipelines, but it sees the whole chain.
+type ChainRule = fn(chain: &Chain, usable: usize) -> Option<Suggestion>;
 
-const CHAIN_RULES: &[ChainRule] = &[merge_repeated::check];
+const CHAIN_RULES: &[ChainRule] = &[merge_repeated::check, cd_parent::check];
 
 const RULES: &[Rule] = &[git::checkout::check, git::stash::check, bundle_flags::check];
 
@@ -91,14 +93,10 @@ pub fn rewrite(chain: &Chain) -> Option<Suggestion> {
         .iter()
         .position(changes_shell_state)
         .unwrap_or(chain.pipelines.len());
-    let usable = Chain {
-        pipelines: chain.pipelines[..unchanged_state].to_vec(),
-    };
-    if let Some(mut suggestion) = CHAIN_RULES.iter().find_map(|rule| rule(&usable)) {
-        suggestion
-            .chain
-            .pipelines
-            .extend_from_slice(&chain.pipelines[unchanged_state..]);
+    if let Some(suggestion) = CHAIN_RULES
+        .iter()
+        .find_map(|rule| rule(chain, unchanged_state))
+    {
         return Some(suggestion);
     }
     chain.pipelines[..unchanged_state]
@@ -249,6 +247,7 @@ mod tests {
                 "touch a && touch b && cat f | grep x",
                 "touch a b && cat f | grep x",
             ),
+            ("ls && cd .. && cd ..", "ls && cd ../.."),
         ];
         for (input, expected) in cases {
             let suggestion = rewrite(&parse_chain(input)).expect("input must be rewritten");
@@ -265,6 +264,8 @@ mod tests {
             "r exec && cat f | grep x",
             "exec > out && touch a && touch b",
             "touch a && setopt x && touch b",
+            "cd .. && cd .. && exec > out",
+            "setopt auto_pushd && cd .. && cd ..",
             "grep x f | wc -l && ls && cd ..",
             "exec > out && grep x f | wc -l",
             "exec > out && cat f | grep x",

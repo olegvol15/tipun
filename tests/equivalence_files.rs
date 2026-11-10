@@ -1,6 +1,7 @@
 mod common;
 
 use std::fs;
+use std::process::Command;
 
 use common::{assert_same_files, assert_same_output, fixtures, sh, suggest};
 
@@ -86,4 +87,46 @@ fn moves_and_recursive_copies_that_create_the_target_are_not_merged() {
         fs::remove_dir_all(before).expect("remove fixture dir");
         fs::remove_dir_all(after).expect("remove fixture dir");
     }
+}
+
+#[test]
+fn one_cd_climbs_to_the_same_directory() {
+    let dir = fixtures("cd-parent");
+    let setup = sh(&dir, "mkdir -p real/a/b/c/src && ln -s real/a/b/c link");
+    assert_eq!(setup.status.code(), Some(0), "setup");
+    let originals = [
+        "cd .. && cd ..",
+        "cd ../ && cd ..",
+        "cd .. && cd ../..",
+        "cd src && cd .. && cd .. && cd ..",
+    ];
+    let shells = [
+        ("zsh", ""),
+        ("zsh", "setopt chase_links; "),
+        ("zsh", "setopt chase_dots; "),
+        ("sh", ""),
+        ("sh", "set -P; "),
+    ];
+    for original in originals {
+        let suggestion = suggest(original).expect("tipun must suggest a rewrite");
+        for (shell, options) in shells {
+            let run = |command: &str| {
+                let script = format!("{options}cd link && {command} && pwd && pwd -P");
+                let output = Command::new(shell)
+                    .args(["-c", &script])
+                    .current_dir(&dir)
+                    .env_remove("CDPATH")
+                    .output()
+                    .expect("run the shell");
+                assert_eq!(output.status.code(), Some(0), "{shell}: {script:?}");
+                output.stdout
+            };
+            assert_eq!(
+                run(&suggestion),
+                run(original),
+                "{shell} {options:?}: {original:?} vs {suggestion:?}"
+            );
+        }
+    }
+    fs::remove_dir_all(dir).expect("remove fixture dir");
 }

@@ -44,6 +44,7 @@ Early development, zsh only. tipun knows a small set of rewrites:
 | `git checkout -b x`, `git checkout -- f` | `git switch -c x`, `git restore f` |
 | `git stash save wip` | `git stash push -m wip` |
 | `touch a && touch b`, `git add a && git add b` | `touch a b`, `git add a b` |
+| `cd .. && cd ..` | `cd ../..` |
 
 ## Install
 

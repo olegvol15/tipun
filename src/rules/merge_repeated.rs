@@ -60,8 +60,8 @@ struct Parts<'a> {
     operands: Vec<&'a Word>,
 }
 
-pub fn check(chain: &Chain) -> Option<Suggestion> {
-    let parts: Vec<Option<Parts>> = chain.pipelines.iter().map(parts).collect();
+pub fn check(chain: &Chain, usable: usize) -> Option<Suggestion> {
+    let parts: Vec<Option<Parts>> = chain.pipelines[..usable].iter().map(parts).collect();
     let mut start = 0;
     while start < parts.len() {
         let Some(first) = &parts[start] else {
