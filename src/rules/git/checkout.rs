@@ -2,7 +2,8 @@ use crate::lexer::Word;
 use crate::parser::{Command, Pipeline};
 use crate::rules::{Rewrite, word};
 
-// Documented exception: git switch and git restore need git 2.23 or later.
+// Documented exception: git switch and git restore need git 2.23 or later. git switch refuses
+// during a merge, revert or rebase, so it runs only on the last pipeline, where nothing is skipped.
 pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
     crate::rules::rewrite_each_stage(pipeline, rewrite)
 }

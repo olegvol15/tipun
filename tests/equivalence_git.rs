@@ -2,7 +2,7 @@ mod common;
 
 use std::fs;
 
-use common::{GIT_INIT, assert_same_git_state, fixtures, sh, suggest};
+use common::{GIT_INIT, GIT_STATE, assert_same_git_state, fixtures, sh, suggest, worktree};
 
 #[test]
 fn bundled_git_commit_flags_commit_the_same() {
@@ -111,6 +111,118 @@ fn excluding_pathspecs_and_noisy_git_rm_are_not_merged() {
             results.push((output.stdout, sh(dir, state).stdout));
         }
         assert_ne!(results[0], results[1], "{original:?} vs {merged:?}");
+        fs::remove_dir_all(before).expect("remove fixture dir");
+        fs::remove_dir_all(after).expect("remove fixture dir");
+    }
+}
+
+#[test]
+fn git_switch_c_creates_and_switches_like_branch_and_checkout() {
+    let detached = format!("{GIT_INIT} && git checkout -q --detach");
+    let upstream = format!(
+        "{GIT_INIT} && git remote add origin https://example.invalid/tipun.git \
+         && git update-ref refs/remotes/origin/main HEAD && git branch -q -u origin/main"
+    );
+    let cases = [
+        (GIT_INIT, "git branch feature && git checkout feature"),
+        (GIT_INIT, "git branch fix/a && git switch fix/a"),
+        (
+            detached.as_str(),
+            "git branch feature && git checkout feature",
+        ),
+        (
+            upstream.as_str(),
+            "git branch feature && git checkout feature",
+        ),
+    ];
+    assert_same_git_state("branch-switch", &cases);
+}
+
+#[test]
+fn git_switch_c_leaves_a_dirty_tree_the_same_but_does_not_list_it() {
+    let (original, suggestion) = (
+        "git branch feature && git checkout feature",
+        "git switch -c feature",
+    );
+    assert_eq!(suggest(original).as_deref(), Some(suggestion));
+    let setup = format!("{GIT_INIT} && echo more >> app.log");
+    let (before, after) = (
+        fixtures("branch-switch-dirty-original"),
+        fixtures("branch-switch-dirty-suggestion"),
+    );
+    let mut outputs = Vec::new();
+    for (dir, command) in [(&before, original), (&after, suggestion)] {
+        assert_eq!(sh(dir, &setup).status.code(), Some(0), "setup");
+        let output = sh(dir, command);
+        assert_eq!(output.status.code(), Some(0), "command: {command:?}");
+        outputs.push(output.stdout);
+    }
+    assert_eq!(outputs, [b"M\tapp.log\n".to_vec(), Vec::new()]);
+    assert_eq!(sh(&after, GIT_STATE).stdout, sh(&before, GIT_STATE).stdout);
+    assert_eq!(worktree(&after), worktree(&before));
+    fs::remove_dir_all(before).expect("remove fixture dir");
+    fs::remove_dir_all(after).expect("remove fixture dir");
+}
+
+#[test]
+fn branches_from_a_tracked_start_point_are_not_switched() {
+    let (original, switched) = (
+        "git branch feature origin/feature && git checkout feature",
+        "git switch -c feature origin/feature",
+    );
+    assert_eq!(suggest(original), None);
+    let setup = format!(
+        "{GIT_INIT} && git remote add origin https://example.invalid/tipun.git \
+         && git update-ref refs/remotes/origin/feature HEAD"
+    );
+    let (before, after) = (
+        fixtures("branch-switch-start-original"),
+        fixtures("branch-switch-start-switched"),
+    );
+    let mut outputs = Vec::new();
+    for (dir, command) in [(&before, original), (&after, switched)] {
+        assert_eq!(sh(dir, &setup).status.code(), Some(0), "setup");
+        let output = sh(dir, command);
+        assert_eq!(output.status.code(), Some(0), "command: {command:?}");
+        outputs.push(output.stdout);
+    }
+    assert_ne!(outputs[0], outputs[1]);
+    fs::remove_dir_all(before).expect("remove fixture dir");
+    fs::remove_dir_all(after).expect("remove fixture dir");
+}
+
+#[test]
+fn git_switch_refuses_during_an_unfinished_merge() {
+    let setup = format!(
+        "{GIT_INIT} && git checkout -q -b other && echo b > new && git add new \
+         && git commit -q -m b && git checkout -q main && git merge -q --no-commit --no-ff other"
+    );
+    let originals = [
+        "git branch feature && git checkout feature",
+        "git checkout -b feature",
+    ];
+    for chained in [
+        "git branch feature && git checkout feature && touch marker",
+        "git checkout -b feature && touch marker",
+    ] {
+        assert_eq!(suggest(chained), None, "{chained:?} would skip touch");
+    }
+    for (i, original) in originals.iter().enumerate() {
+        let suggestion = suggest(original).expect("tipun must suggest a rewrite");
+        let (before, after) = (
+            fixtures(&format!("switch-merging-original-{i}")),
+            fixtures(&format!("switch-merging-suggestion-{i}")),
+        );
+        let mut codes = Vec::new();
+        for (dir, command) in [(&before, *original), (&after, suggestion.as_str())] {
+            assert_eq!(sh(dir, &setup).status.code(), Some(0), "setup");
+            codes.push(sh(dir, command).status.code());
+        }
+        assert_eq!(
+            codes,
+            [Some(0), Some(128)],
+            "{original:?} vs {suggestion:?}"
+        );
         fs::remove_dir_all(before).expect("remove fixture dir");
         fs::remove_dir_all(after).expect("remove fixture dir");
     }

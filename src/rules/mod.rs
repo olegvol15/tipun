@@ -25,13 +25,18 @@ type Rule = fn(&Pipeline) -> Option<Rewrite>;
 // A chain rule may only rewrite the first `usable` pipelines, but it sees the whole chain.
 type ChainRule = fn(chain: &Chain, usable: usize) -> Option<Suggestion>;
 
-const CHAIN_RULES: &[ChainRule] = &[merge_repeated::check, cd_parent::check];
+const CHAIN_RULES: &[ChainRule] = &[
+    merge_repeated::check,
+    cd_parent::check,
+    git::branch_switch::check,
+];
 
-const RULES: &[Rule] = &[git::checkout::check, git::stash::check, bundle_flags::check];
+const RULES: &[Rule] = &[git::stash::check, bundle_flags::check];
 
 // These may change the exit status, which decides whether the rest of an `&&` chain runs. Merging
 // stages does: `cat missing | sort` exits 0 with sort's status, `sort missing` exits 2.
 const LAST_PIPELINE_RULES: &[Rule] = &[
+    git::checkout::check,
     text::useless_cat::check,
     text::sort_uniq::check,
     text::grep_count::check,
@@ -236,7 +241,7 @@ mod tests {
                 "grep x f | wc -l && grep y f",
             ),
             ("ls -l -a && cat f | grep x", "ls -la && cat f | grep x"),
-            ("git checkout -b x && ls", "git switch -c x && ls"),
+            ("ls && git checkout -b x", "ls && git switch -c x"),
             ("ls -l -a && exec > out", "ls -la && exec > out"),
             ("echo exec && cat f | grep x", "echo exec && grep x f"),
             (
@@ -248,6 +253,10 @@ mod tests {
                 "touch a b && cat f | grep x",
             ),
             ("ls && cd .. && cd ..", "ls && cd ../.."),
+            (
+                "ls && git branch x && git checkout x",
+                "ls && git switch -c x",
+            ),
         ];
         for (input, expected) in cases {
             let suggestion = rewrite(&parse_chain(input)).expect("input must be rewritten");
@@ -265,7 +274,11 @@ mod tests {
             "exec > out && touch a && touch b",
             "touch a && setopt x && touch b",
             "cd .. && cd .. && exec > out",
+            "git checkout -b x && touch marker",
+            "git checkout -- f && ls",
+            "git branch x && git checkout x && exec > out",
             "setopt auto_pushd && cd .. && cd ..",
+            "exec > out && git branch x && git checkout x",
             "grep x f | wc -l && ls && cd ..",
             "exec > out && grep x f | wc -l",
             "exec > out && cat f | grep x",
