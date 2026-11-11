@@ -190,3 +190,34 @@ fn branches_from_a_tracked_start_point_are_not_switched() {
     fs::remove_dir_all(before).expect("remove fixture dir");
     fs::remove_dir_all(after).expect("remove fixture dir");
 }
+
+#[test]
+fn git_switch_refuses_during_an_unfinished_merge() {
+    let setup = format!(
+        "{GIT_INIT} && git checkout -q -b other && echo b > new && git add new \
+         && git commit -q -m b && git checkout -q main && git merge -q --no-commit --no-ff other"
+    );
+    let originals = [
+        "git branch feature && git checkout feature",
+        "git checkout -b feature",
+    ];
+    for (i, original) in originals.iter().enumerate() {
+        let suggestion = suggest(original).expect("tipun must suggest a rewrite");
+        let (before, after) = (
+            fixtures(&format!("switch-merging-original-{i}")),
+            fixtures(&format!("switch-merging-suggestion-{i}")),
+        );
+        let mut codes = Vec::new();
+        for (dir, command) in [(&before, *original), (&after, suggestion.as_str())] {
+            assert_eq!(sh(dir, &setup).status.code(), Some(0), "setup");
+            codes.push(sh(dir, command).status.code());
+        }
+        assert_eq!(
+            codes,
+            [Some(0), Some(128)],
+            "{original:?} vs {suggestion:?}"
+        );
+        fs::remove_dir_all(before).expect("remove fixture dir");
+        fs::remove_dir_all(after).expect("remove fixture dir");
+    }
+}

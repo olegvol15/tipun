@@ -2,8 +2,8 @@ use crate::lexer::Word;
 use crate::parser::{Chain, Command, Pipeline};
 use crate::rules::{Suggestion, word};
 
-// Documented exception: needs git 2.23 or later. switch -c checks out no tree, so it does not list
-// modified files or the upstream status on stdout, and the reflog says "Created from HEAD".
+// Documented exception: needs git 2.23+ and refuses during a merge, revert or rebase. It checks out
+// no tree, so stdout skips modified files and upstream status; the reflog says "Created from HEAD".
 pub fn check(chain: &Chain, usable: usize) -> Option<Suggestion> {
     let pipelines = &chain.pipelines[..usable];
     let i = pipelines.windows(2).position(|pair| {
