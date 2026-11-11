@@ -5,24 +5,27 @@ use crate::rules::{Suggestion, word};
 // Documented exception: needs git 2.23+ and refuses during a merge, revert or rebase. It checks out
 // no tree, so stdout skips modified files and upstream status; the reflog says "Created from HEAD".
 pub fn check(chain: &Chain, usable: usize) -> Option<Suggestion> {
-    let pipelines = &chain.pipelines[..usable];
-    let i = pipelines.windows(2).position(|pair| {
-        let value = |pipeline, subcommands| git(pipeline, subcommands).map(|name| &name.value);
-        let created = value(&pair[0], &["branch"]);
-        created.is_some() && created == value(&pair[1], &["checkout", "switch"])
-    })?;
+    let pipelines = &chain.pipelines;
+    if usable < pipelines.len() || pipelines.len() < 2 {
+        return None;
+    }
+    // A refused switch would skip the rest of the chain, so the pair must end it.
+    let i = pipelines.len() - 2;
     let name = git(&pipelines[i], &["branch"])?;
+    let switched = git(&pipelines[i + 1], &["checkout", "switch"])?;
+    if name.value != switched.value {
+        return None;
+    }
     let command = &pipelines[i].stages[0];
     let switch = Command {
         name: command.name.clone(),
         args: vec![word("switch"), word("-c"), name.clone()],
         redirects: Vec::new(),
     };
-    let mut merged = chain.pipelines[..i].to_vec();
+    let mut merged = pipelines[..i].to_vec();
     merged.push(Pipeline {
         stages: vec![switch],
     });
-    merged.extend_from_slice(&chain.pipelines[i + 2..]);
     Some(Suggestion {
         chain: Chain { pipelines: merged },
         explanation: "git switch -c creates the branch and switches to it in one step.".to_string(),
@@ -69,8 +72,8 @@ mod tests {
                 "ls && git switch -c x",
             ),
             (
-                "git branch x && git checkout x && git status",
-                "git switch -c x && git status",
+                "git branch x && git checkout x && git branch y && git checkout y",
+                "git branch x && git checkout x && git switch -c y",
             ),
         ];
         assert_chain_rewrites(check, &cases);
@@ -82,6 +85,7 @@ mod tests {
             "git branch x",
             "git checkout x",
             "git branch x && git checkout y",
+            "git branch x && git checkout x && touch marker",
             "git branch x && ls && git checkout x",
             "git checkout x && git branch x",
             "git branch x main && git checkout x",
@@ -118,7 +122,7 @@ mod tests {
     fn suggestion_parses_again_and_is_not_rewritten_twice() {
         let inputs = [
             "git branch 'a b' && git checkout 'a b'",
-            "ls && git branch x && git switch x && ls",
+            "ls && git branch x && git switch x",
         ];
         assert_chain_stable(check, &inputs);
     }

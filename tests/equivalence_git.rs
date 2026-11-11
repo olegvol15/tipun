@@ -201,6 +201,12 @@ fn git_switch_refuses_during_an_unfinished_merge() {
         "git branch feature && git checkout feature",
         "git checkout -b feature",
     ];
+    for chained in [
+        "git branch feature && git checkout feature && touch marker",
+        "git checkout -b feature && touch marker",
+    ] {
+        assert_eq!(suggest(chained), None, "{chained:?} would skip touch");
+    }
     for (i, original) in originals.iter().enumerate() {
         let suggestion = suggest(original).expect("tipun must suggest a rewrite");
         let (before, after) = (
