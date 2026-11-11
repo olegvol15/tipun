@@ -25,7 +25,11 @@ type Rule = fn(&Pipeline) -> Option<Rewrite>;
 // A chain rule may only rewrite the first `usable` pipelines, but it sees the whole chain.
 type ChainRule = fn(chain: &Chain, usable: usize) -> Option<Suggestion>;
 
-const CHAIN_RULES: &[ChainRule] = &[merge_repeated::check, cd_parent::check];
+const CHAIN_RULES: &[ChainRule] = &[
+    merge_repeated::check,
+    cd_parent::check,
+    git::branch_switch::check,
+];
 
 const RULES: &[Rule] = &[git::checkout::check, git::stash::check, bundle_flags::check];
 
@@ -248,6 +252,10 @@ mod tests {
                 "touch a b && cat f | grep x",
             ),
             ("ls && cd .. && cd ..", "ls && cd ../.."),
+            (
+                "git branch x && git checkout x && exec > out",
+                "git switch -c x && exec > out",
+            ),
         ];
         for (input, expected) in cases {
             let suggestion = rewrite(&parse_chain(input)).expect("input must be rewritten");
@@ -266,6 +274,7 @@ mod tests {
             "touch a && setopt x && touch b",
             "cd .. && cd .. && exec > out",
             "setopt auto_pushd && cd .. && cd ..",
+            "exec > out && git branch x && git checkout x",
             "grep x f | wc -l && ls && cd ..",
             "exec > out && grep x f | wc -l",
             "exec > out && cat f | grep x",
