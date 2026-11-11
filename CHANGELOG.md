@@ -4,6 +4,24 @@ All notable changes to tipun are documented in this file. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and tipun follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] - 2026-11-11
+
+### Added
+
+- Commands joined with `&&` are now understood, and tips apply to any part of the chain:
+  `cd src && cat f | grep x` -> `cd src && grep x f`. `;`, `||` and `&` still keep tipun silent.
+- Repeated commands are merged into one call: `touch a && touch b` -> `touch a b`, also for rm,
+  mkdir, chmod, `cp a dir/`, `git add`, `git rm -q` and `git branch -d`.
+- `cd .. && cd ..` -> `cd ../..`.
+- `git branch x && git checkout x` (or `git switch x`) -> `git switch -c x`.
+
+### Fixed
+
+- Automatic updates run the install script from the new release's tag instead of `main`, and only
+  one update runs at a time.
+- Commands containing control characters or bidi overrides are ignored, so a printed tip can no
+  longer send escape sequences to the terminal.
+
 ## [0.1.2] - 2026-11-08
 
 ### Added
@@ -56,6 +74,7 @@ All notable changes to tipun are documented in this file. The format is based on
   silent when a redirect could change the result, such as writing to the file being read.
 - Prebuilt binaries for macOS (arm64, x86_64) and Linux (musl, x86_64 and arm64).
 
+[0.1.3]: https://github.com/olegvol15/tipun/releases/tag/v0.1.3
 [0.1.2]: https://github.com/olegvol15/tipun/releases/tag/v0.1.2
 [0.1.1]: https://github.com/olegvol15/tipun/releases/tag/v0.1.1
 [0.1.0]: https://github.com/olegvol15/tipun/releases/tag/v0.1.0
