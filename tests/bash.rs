@@ -71,6 +71,8 @@ fn hook_is_silent_for_failures_empty_lines_and_aliases() {
     for bash in BASHES {
         let lines = [
             "ls words.txt",
+            "alias ls='echo'",
+            "ls -l -a && unalias ls",
             "cat missing.txt | grep a",
             "",
             "alias sort='sort -r'",
