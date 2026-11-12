@@ -32,7 +32,7 @@ reviews:
         The lexer and parser are fail-closed: anything outside the supported subset (plain
         words, quotes without expansions, `|`, `&&`, `>`, `>>`, `<`, `n>`, `n>&m`) must make the whole
         command unsupported. Flag any input that could be accepted with a different meaning
-        than zsh gives it, and any possible panic on arbitrary input.
+        than zsh or bash gives it, and any possible panic on arbitrary input.
     - path: "src/parser.rs"
       instructions: *fail_closed
     - path: "src/**/*.rs"

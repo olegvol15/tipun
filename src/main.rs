@@ -53,6 +53,7 @@ enum Command {
 #[derive(Clone, ValueEnum)]
 enum Shell {
     Zsh,
+    Bash,
 }
 
 fn main() -> ExitCode {
@@ -86,6 +87,7 @@ fn main() -> ExitCode {
         Command::Init { shell } => {
             match shell {
                 Shell::Zsh => print!("{}", include_str!("init.zsh")),
+                Shell::Bash => print!("{}", include_str!("init.bash")),
             }
             ExitCode::SUCCESS
         }

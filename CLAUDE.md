@@ -13,12 +13,13 @@ occasionally suggests a cleaner way to write the same command, e.g.
   It only updates copies installed by `install.sh`, running the `install.sh` from the new release's
   tag, never from `main`. `analyze` never waits on the network.
 - Fast: `tipun` runs before every prompt, so it must feel instant.
-- v0.1 supports zsh only, but the Rust core must stay shell-agnostic.
+- tipun supports zsh and bash; the Rust core must stay shell-agnostic.
 
 ## Architecture
 
 ```
-zsh adapter (thin: captures raw command, alias-expanded command, exit code)
+shell adapter (thin: zsh passes the raw and alias-expanded command, bash the raw command
+  from history and its `alias` output; both pass the exit code)
   -> tipun analyze
   -> lexer -> parser -> Chain of pipelines (joined by &&)
   -> rules: fn(&Pipeline) -> Option<Rewrite>   (pure, no I/O), tried on each pipeline up to
@@ -26,7 +27,7 @@ zsh adapter (thin: captures raw command, alias-expanded command, exit code)
   -> one short tip on stderr
 ```
 
-- The core never depends on zsh concepts. The shell adapter makes no rule decisions.
+- The core never depends on zsh or bash concepts. The shell adapter makes no rule decisions.
 - **The parser is hand-written and fail-closed.** It accepts only a small whitelisted subset (plain
   words, single/double quotes without expansions, `|`, `&&`, `>`, `>>`, `<`, `n>`, `n>&m`).
   Anything else makes the whole command unsupported, and tipun stays silent. No regex-based
@@ -67,7 +68,7 @@ aliases (`cat` -> `bat`) and prefixes (`sudo`, `time`); builtins earlier in a ch
   lines otherwise; always exits 0 and never prints errors (only with `TIPUN_DEBUG=1`).
   `--aliases` takes the output of bash's `alias`; tipun expands command words itself and stays
   silent on aliases it cannot expand safely
-- `tipun init zsh`: prints the embedded zsh integration
+- `tipun init zsh|bash`: prints the embedded shell integration
 - `tipun update [--quiet]`: installs the latest release over a copy installed by `install.sh`
 
 Env: `TIPUN_DISABLE`, `TIPUN_DEBUG`, `TIPUN_NO_UPDATE`, `TIPUN_STATE_DIR`. Silent and no update

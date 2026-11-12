@@ -76,8 +76,16 @@ main() {
         *":$dir:"*) ;;
         *) echo "Add $dir to your PATH to run tipun." ;;
     esac
-    echo "To enable tips in zsh, add this line to ~/.zshrc:"
-    echo "  eval \"\$(tipun init zsh)\""
+    case ${SHELL-} in
+        */bash) shell=bash ;;
+        *) shell=zsh ;;
+    esac
+    echo "To enable tips in $shell, add this line to ~/.${shell}rc:"
+    echo "  eval \"\$(tipun init $shell)\""
+    if [ "$shell" = bash ]; then
+        echo "Login shells read the first of ~/.bash_profile, ~/.bash_login and ~/.profile"
+        echo "instead; make sure that file sources ~/.bashrc."
+    fi
     echo "tipun updates itself once a day. Set TIPUN_NO_UPDATE=1 to turn this off."
 }
 
