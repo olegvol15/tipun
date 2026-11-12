@@ -246,7 +246,7 @@ fn init_bash_prints_the_prompt_command() {
     assert_eq!(output.status.code(), Some(0));
     let script = String::from_utf8_lossy(&output.stdout);
     assert!(script.contains("_tipun_prompt() {"));
-    assert!(script.contains("PROMPT_COMMAND=\"_tipun_prompt"));
+    assert!(script.contains("_tipun_snapshot() {"));
     assert!(output.stderr.is_empty());
 }
 

@@ -110,3 +110,23 @@ fn hook_keeps_the_exit_status_and_other_prompt_commands() {
         );
     }
 }
+
+#[test]
+fn hook_is_silent_when_a_later_prompt_hook_changes_aliases() {
+    let appends = [
+        "PROMPT_COMMAND+=$'\\n''alias ls=echo'",
+        "if ((BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 501)); then \
+         PROMPT_COMMAND+=('alias ls=echo'); else PROMPT_COMMAND+=$'\\n''alias ls=echo'; fi",
+    ];
+    for bash in BASHES {
+        for append in appends {
+            let lines = ["ls -l -a", append, "ls -l -a"];
+            let stderr = run_interactive_bash(bash, "later-hook", &lines);
+            assert_eq!(
+                stderr.matches("tipun tip: ls -la").count(),
+                1,
+                "{bash} {append:?}: {stderr:?}"
+            );
+        }
+    }
+}
