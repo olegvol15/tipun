@@ -24,7 +24,7 @@ _tipun_prompt() {
 _tipun_snapshot() {
     local exit_code=$? last=${PROMPT_COMMAND-}
     if ((BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 501)); then
-        last=${PROMPT_COMMAND[${#PROMPT_COMMAND[@]} - 1]-}
+        last=${PROMPT_COMMAND[-1]-}
     fi
     if [[ $last == *_tipun_snapshot ]]; then
         _tipun_aliases=$(builtin alias)

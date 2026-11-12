@@ -117,6 +117,9 @@ fn hook_is_silent_when_a_later_prompt_hook_changes_aliases() {
         "PROMPT_COMMAND+=$'\\n''alias ls=echo'",
         "if ((BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 501)); then \
          PROMPT_COMMAND+=('alias ls=echo'); else PROMPT_COMMAND+=$'\\n''alias ls=echo'; fi",
+        "if ((BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] >= 501)); then \
+         unset 'PROMPT_COMMAND[1]'; PROMPT_COMMAND+=('alias ls=echo'); \
+         else PROMPT_COMMAND+=$'\\n''alias ls=echo'; fi",
     ];
     for bash in BASHES {
         for append in appends {
