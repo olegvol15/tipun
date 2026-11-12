@@ -84,8 +84,9 @@ echo 'eval "$(tipun init bash)"' >> ~/.bashrc   # bash
 ```
 
 In bash, keep the line at the end of `~/.bashrc`, after other tools that set `PROMPT_COMMAND`.
-Login shells (macOS Terminal starts bash as one) read `~/.bash_profile` instead, so make sure it
-sources `~/.bashrc`: `[ -f ~/.bashrc ] && . ~/.bashrc`.
+Login shells (macOS Terminal starts bash as one) read the first of `~/.bash_profile`,
+`~/.bash_login` and `~/.profile` instead, so make sure that file sources `~/.bashrc`:
+`[ -f ~/.bashrc ] && . ~/.bashrc`.
 bash reads the command from history, so with `HISTCONTROL=ignoredups` (Ubuntu's default) a
 command repeated right away gets no second tip, and history must be on.
 
