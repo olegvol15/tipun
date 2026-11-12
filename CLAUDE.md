@@ -62,9 +62,11 @@ aliases (`cat` -> `bat`) and prefixes (`sudo`, `time`); builtins earlier in a ch
 ## CLI
 
 - `tipun suggest <CMD>`: pure, prints the suggestion, exit 0 if found, 1 if silent
-- `tipun analyze --command <CMD> [--expanded <CMD>] [--exit-code <N>] [--columns <N>]`: hook
-  entry point; draws a box when stderr is a terminal wide enough, plain lines otherwise; always
-  exits 0 and never prints errors (only with `TIPUN_DEBUG=1`)
+- `tipun analyze --command <CMD> [--expanded <CMD> | --aliases <TEXT>] [--exit-code <N>]
+  [--columns <N>]`: hook entry point; draws a box when stderr is a terminal wide enough, plain
+  lines otherwise; always exits 0 and never prints errors (only with `TIPUN_DEBUG=1`).
+  `--aliases` takes the output of bash's `alias`; tipun expands command words itself and stays
+  silent on aliases it cannot expand safely
 - `tipun init zsh`: prints the embedded zsh integration
 - `tipun update [--quiet]`: installs the latest release over a copy installed by `install.sh`
 

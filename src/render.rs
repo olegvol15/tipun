@@ -19,15 +19,19 @@ fn render_command(command: &Command) -> String {
 }
 
 fn render_redirection(redirection: &Redirection) -> String {
-    let op = match redirection.op {
-        Redirect::Out { fd } => format!("{}>", render_fd(fd)),
-        Redirect::Append { fd } => format!("{}>>", render_fd(fd)),
-        Redirect::In => "<".to_string(),
-        Redirect::Dup { fd, to } => format!("{fd}>&{to}"),
-    };
+    let op = redirect_op(&redirection.op);
     match &redirection.target {
         Some(target) => format!("{op} {}", target.raw),
         None => op,
+    }
+}
+
+pub fn redirect_op(op: &Redirect) -> String {
+    match op {
+        Redirect::Out { fd } => format!("{}>", render_fd(*fd)),
+        Redirect::Append { fd } => format!("{}>>", render_fd(*fd)),
+        Redirect::In => "<".to_string(),
+        Redirect::Dup { fd, to } => format!("{fd}>&{to}"),
     }
 }
 
