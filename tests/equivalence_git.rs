@@ -240,10 +240,7 @@ fn git_restore_staged_unstages_like_reset() {
     );
     let cases = [
         (staged.as_str(), "git reset -q HEAD app.log"),
-        (
-            staged.as_str(),
-            "git reset -q HEAD -- app.log 'my file.txt'",
-        ),
+        (staged.as_str(), "git reset -q HEAD -- 'my file.txt'"),
         (staged.as_str(), "git reset -q HEAD ."),
         (new_file.as_str(), "git reset HEAD new"),
         (new_file.as_str(), "git reset HEAD -- new"),
@@ -298,4 +295,40 @@ fn git_restore_staged_fails_on_unknown_paths_so_it_must_end_the_chain() {
     assert_eq!(codes, [Some(0), Some(1)], "{original:?} vs {suggestion:?}");
     fs::remove_dir_all(before).expect("remove fixture dir");
     fs::remove_dir_all(after).expect("remove fixture dir");
+}
+
+#[test]
+fn several_paths_and_captured_listings_are_not_unstaged_with_restore() {
+    let pairs = [
+        (
+            "git reset HEAD app.log missing",
+            "git restore --staged app.log missing",
+        ),
+        (
+            "git reset HEAD app.log > report",
+            "git restore --staged app.log > report",
+        ),
+        (
+            "git reset HEAD app.log | tee report",
+            "git restore --staged app.log | tee report",
+        ),
+    ];
+    let setup = format!("{GIT_INIT} && echo more >> app.log && git add app.log");
+    for (i, (original, restored)) in pairs.iter().enumerate() {
+        assert_eq!(suggest(original), None, "original: {original:?}");
+        let (before, after) = (
+            fixtures(&format!("reset-restore-excluded-{i}")),
+            fixtures(&format!("reset-restore-restored-{i}")),
+        );
+        let mut results = Vec::new();
+        for (dir, command) in [(&before, *original), (&after, *restored)] {
+            assert_eq!(sh(dir, &setup).status.code(), Some(0), "setup");
+            let output = sh(dir, command);
+            let report = fs::read(dir.join("report")).unwrap_or_default();
+            results.push((output.stdout, report, sh(dir, GIT_STATE).stdout));
+        }
+        assert_ne!(results[0], results[1], "{original:?} vs {restored:?}");
+        fs::remove_dir_all(before).expect("remove fixture dir");
+        fs::remove_dir_all(after).expect("remove fixture dir");
+    }
 }
