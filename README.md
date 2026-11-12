@@ -46,6 +46,7 @@ Early development, zsh and bash. tipun knows a small set of rewrites:
 | `touch a && touch b`, `git add a && git add b` | `touch a b`, `git add a b` |
 | `cd .. && cd ..` | `cd ../..` |
 | `git branch x && git checkout x` | `git switch -c x` |
+| `git reset HEAD f` | `git restore --staged f` |
 
 ## Install
 
