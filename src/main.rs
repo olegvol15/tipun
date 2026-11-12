@@ -34,6 +34,8 @@ enum Command {
         command: String,
         #[arg(long, allow_hyphen_values = true)]
         expanded: Option<String>,
+        #[arg(long, allow_hyphen_values = true, conflicts_with = "expanded")]
+        aliases: Option<String>,
         #[arg(long, default_value_t = 0)]
         exit_code: i32,
         #[arg(long)]
@@ -70,10 +72,15 @@ fn main() -> ExitCode {
         Command::Analyze {
             command,
             expanded,
+            aliases,
             exit_code,
             columns,
         } => {
-            analyze(&command, expanded.as_deref(), exit_code, columns.as_deref());
+            let expanded = match aliases {
+                Some(aliases) => Expanded::Aliases(aliases),
+                None => expanded.map_or(Expanded::Unknown, Expanded::Command),
+            };
+            analyze(&command, &expanded, exit_code, columns.as_deref());
             ExitCode::SUCCESS
         }
         Command::Init { shell } => {
@@ -123,7 +130,13 @@ fn suggest(command: &str) -> ExitCode {
     }
 }
 
-fn analyze(command: &str, expanded: Option<&str>, exit_code: i32, columns: Option<&str>) {
+enum Expanded {
+    Unknown,
+    Command(String),
+    Aliases(String),
+}
+
+fn analyze(command: &str, expanded: &Expanded, exit_code: i32, columns: Option<&str>) {
     if env::var_os("CI").is_some() || env::var_os("TIPUN_DISABLE").is_some() {
         return;
     }
@@ -137,6 +150,21 @@ fn analyze(command: &str, expanded: Option<&str>, exit_code: i32, columns: Optio
     }
     let Some(rewrite) = find_rewrite(command) else {
         return;
+    };
+    let from_aliases;
+    let expanded = match expanded {
+        Expanded::Unknown => None,
+        Expanded::Command(expanded) => Some(expanded.as_str()),
+        Expanded::Aliases(aliases) => {
+            let Some(expanded) = expanded::expand_aliases(command, aliases) else {
+                if debug() {
+                    eprintln!("aliases cannot be expanded safely");
+                }
+                return;
+            };
+            from_aliases = expanded;
+            Some(from_aliases.as_str())
+        }
     };
     if let Some(expanded) = expanded
         && !expanded::matches_typed(command, expanded)

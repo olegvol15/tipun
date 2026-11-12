@@ -196,6 +196,41 @@ fn analyze_is_silent_when_aliases_change_the_command() {
 }
 
 #[test]
+fn analyze_expands_bash_aliases() {
+    let command = "--command=cat app.log | grep ERROR";
+    let tip = "tipun tip: grep ERROR app.log\n  grep can read the file itself, no need for cat.\n";
+    let cases = [
+        ("--aliases=", tip),
+        (
+            "--aliases=alias grep='grep --color=auto'\nalias ll='ls -alF'\n",
+            tip,
+        ),
+        ("--aliases=alias cat='bat'\n", ""),
+        ("--aliases=alias grep='grep -v'\n", ""),
+        ("--aliases=alias cat='cat '\n", ""),
+        ("--aliases=not alias output", ""),
+    ];
+    for (aliases, expected) in cases {
+        let output = tipun(&["analyze", command, aliases]);
+        assert_eq!(output.status.code(), Some(0), "{aliases:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            expected,
+            "{aliases:?}"
+        );
+    }
+    let both = [
+        "analyze",
+        command,
+        "--expanded=cat app.log | grep ERROR",
+        "--aliases=",
+    ];
+    let output = tipun(&both);
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty(), "{:?}", output.stderr);
+}
+
+#[test]
 fn init_zsh_prints_the_hooks() {
     let output = tipun(&["init", "zsh"]);
     assert_eq!(output.status.code(), Some(0));
