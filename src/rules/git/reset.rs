@@ -2,8 +2,8 @@ use crate::lexer::Word;
 use crate::parser::{Command, Pipeline};
 use crate::rules::{Rewrite, word};
 
-// Documented exception: git restore needs git 2.23 or later, does not list the unstaged changes on
-// stdout, and exits 1 for a path git does not know where reset exits 0. Last pipeline only.
+// Documented exception: needs git 2.23+, does not list the unstaged changes, exits 1 for a path git
+// does not know where reset exits 0, and runs the post-checkout hook. Last pipeline only.
 pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
     let rewrite: fn(&Command) -> Option<(Command, String)> = match pipeline.stages.len() {
         1 => rewrite_alone,
@@ -35,11 +35,10 @@ fn unstage(command: &Command, listing_may_go: bool) -> Option<(Command, String)>
     let [head, paths @ ..] = rest else {
         return None;
     };
-    // One unknown path makes restore change nothing, while reset still unstages the others.
-    let path = match paths {
-        [separator, path] if separator.value == "--" => path,
-        [path] => path,
-        _ => return None,
+    // One unknown path among several makes restore change nothing. `HEAD -- f` is left out because
+    // it also works before the first commit, where restore fails.
+    let [path] = paths else {
+        return None;
     };
     if reset.value != "reset" || head.value != "HEAD" || !is_path(path) {
         return None;
@@ -70,11 +69,9 @@ mod tests {
     fn rewrites_reset_to_restore() {
         let cases = [
             ("git reset HEAD f", "git restore --staged f"),
-            ("git reset HEAD -- f", "git restore --staged f"),
             ("git reset HEAD .", "git restore --staged ."),
             ("git reset HEAD 'my file'", "git restore --staged 'my file'"),
             ("git reset -q HEAD f", "git restore --staged f"),
-            ("git reset -q HEAD -- f", "git restore --staged f"),
             ("git reset HEAD src/c", "git restore --staged src/c"),
             ("git reset -q HEAD f | cat", "git restore --staged f | cat"),
             ("git reset -q HEAD f > log", "git restore --staged f > log"),
@@ -103,6 +100,8 @@ mod tests {
             "git reset --quiet HEAD f",
             "git reset -q",
             "git reset HEAD -- -f",
+            "git reset HEAD -- f",
+            "git reset -q HEAD -- f",
             "git reset HEAD -f",
             "git reset HEAD f --",
             "git reset HEAD ''",
@@ -134,7 +133,7 @@ mod tests {
     fn suggestion_parses_again_and_is_not_rewritten_twice() {
         assert_stable(
             check,
-            &["git reset HEAD -- 'b c'", "git reset -q HEAD f > log"],
+            &["git reset HEAD 'b c'", "git reset -q HEAD f > log"],
         );
     }
 }

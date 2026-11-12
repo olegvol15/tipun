@@ -240,10 +240,9 @@ fn git_restore_staged_unstages_like_reset() {
     );
     let cases = [
         (staged.as_str(), "git reset -q HEAD app.log"),
-        (staged.as_str(), "git reset -q HEAD -- 'my file.txt'"),
+        (staged.as_str(), "git reset -q HEAD 'my file.txt'"),
         (staged.as_str(), "git reset -q HEAD ."),
         (new_file.as_str(), "git reset HEAD new"),
-        (new_file.as_str(), "git reset HEAD -- new"),
         (conflict.as_str(), "git reset -q HEAD case.txt"),
     ];
     assert_same_git_state("reset-restore", &cases);
@@ -331,4 +330,53 @@ fn several_paths_and_captured_listings_are_not_unstaged_with_restore() {
         fs::remove_dir_all(before).expect("remove fixture dir");
         fs::remove_dir_all(after).expect("remove fixture dir");
     }
+}
+
+#[test]
+fn git_restore_staged_runs_the_post_checkout_hook() {
+    let (original, suggestion) = ("git reset -q HEAD app.log", "git restore --staged app.log");
+    assert_eq!(suggest(original).as_deref(), Some(suggestion));
+    let setup = format!(
+        "{GIT_INIT} && echo more >> app.log && git add app.log \
+         && printf '#!/bin/sh\\necho hook\\nexit 3\\n' > .git/hooks/post-checkout \
+         && chmod +x .git/hooks/post-checkout"
+    );
+    let (before, after) = (
+        fixtures("reset-restore-hook-original"),
+        fixtures("reset-restore-hook-suggestion"),
+    );
+    let mut results = Vec::new();
+    for (dir, command) in [(&before, original), (&after, suggestion)] {
+        assert_eq!(sh(dir, &setup).status.code(), Some(0), "setup");
+        let output = sh(dir, command);
+        results.push((output.status.code(), output.stdout, output.stderr));
+    }
+    let hook = (Some(3), Vec::new(), b"hook\n".to_vec());
+    assert_eq!(results, [(Some(0), Vec::new(), Vec::new()), hook]);
+    assert_eq!(sh(&after, GIT_STATE).stdout, sh(&before, GIT_STATE).stdout);
+    fs::remove_dir_all(before).expect("remove fixture dir");
+    fs::remove_dir_all(after).expect("remove fixture dir");
+}
+
+#[test]
+fn reset_with_a_separator_is_not_unstaged_with_restore_before_the_first_commit() {
+    let (original, restored) = ("git reset HEAD -- app.log", "git restore --staged app.log");
+    assert_eq!(suggest(original), None);
+    let setup = "git init -q -b main && git add app.log";
+    let (before, after) = (
+        fixtures("reset-restore-unborn-original"),
+        fixtures("reset-restore-unborn-restored"),
+    );
+    let mut results = Vec::new();
+    for (dir, command) in [(&before, original), (&after, restored)] {
+        assert_eq!(sh(dir, setup).status.code(), Some(0), "setup");
+        let code = sh(dir, command).status.code();
+        results.push((code, sh(dir, "git diff --cached --name-only").stdout));
+    }
+    assert_eq!(
+        results,
+        [(Some(0), Vec::new()), (Some(128), b"app.log\n".to_vec())]
+    );
+    fs::remove_dir_all(before).expect("remove fixture dir");
+    fs::remove_dir_all(after).expect("remove fixture dir");
 }
