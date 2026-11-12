@@ -241,8 +241,18 @@ fn init_zsh_prints_the_hooks() {
 }
 
 #[test]
+fn init_bash_prints_the_prompt_command() {
+    let output = tipun(&["init", "bash"]);
+    assert_eq!(output.status.code(), Some(0));
+    let script = String::from_utf8_lossy(&output.stdout);
+    assert!(script.contains("_tipun_prompt() {"));
+    assert!(script.contains("PROMPT_COMMAND=\"_tipun_prompt"));
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
 fn init_rejects_unknown_shells() {
-    for args in [&["init", "bash"][..], &["init"]] {
+    for args in [&["init", "fish"][..], &["init"]] {
         let output = tipun(args);
         assert_eq!(output.status.code(), Some(2), "args: {args:?}");
         assert!(output.stdout.is_empty(), "args: {args:?}");

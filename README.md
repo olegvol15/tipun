@@ -32,7 +32,7 @@ a terminal, tipun prints the same tip on two plain lines.
 
 ## Status
 
-Early development, zsh only. tipun knows a small set of rewrites:
+Early development, zsh and bash. tipun knows a small set of rewrites:
 
 | You type | tipun suggests |
 |---|---|
@@ -76,11 +76,16 @@ Compare the checksum with the `.sha256` file next to the archive, and make sure 
 on your `PATH`. With a Rust toolchain you can instead build from a checkout:
 `cargo install --path .`.
 
-Then add the hook to `~/.zshrc`:
+Then add the hook to your shell's startup file:
 
 ```
-echo 'eval "$(tipun init zsh)"' >> ~/.zshrc
+echo 'eval "$(tipun init zsh)"' >> ~/.zshrc     # zsh
+echo 'eval "$(tipun init bash)"' >> ~/.bashrc   # bash
 ```
+
+In bash, keep the line at the end of `~/.bashrc`, after other tools that set `PROMPT_COMMAND`.
+bash reads the command from history, so with `HISTCONTROL=ignoredups` (Ubuntu's default) a
+command repeated right away gets no second tip, and history must be on.
 
 ## Usage
 
