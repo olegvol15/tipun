@@ -45,6 +45,7 @@ Early development, zsh and bash. tipun knows a small set of rewrites:
 | `git stash save wip` | `git stash push -m wip` |
 | `touch a && touch b`, `git add a && git add b` | `touch a b`, `git add a b` |
 | `cd .. && cd ..` | `cd ../..` |
+| `mkdir a && mkdir a/b` | `mkdir -p a/b` |
 | `git branch x && git checkout x` | `git switch -c x` |
 | `git reset HEAD f` | `git restore --staged f` |
 
