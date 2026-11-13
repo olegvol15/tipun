@@ -227,3 +227,156 @@ fn git_switch_refuses_during_an_unfinished_merge() {
         fs::remove_dir_all(after).expect("remove fixture dir");
     }
 }
+
+#[test]
+fn git_restore_staged_unstages_like_reset() {
+    let staged =
+        format!("{GIT_INIT} && echo more >> app.log && echo x >> 'my file.txt' && git add -A");
+    let new_file = format!("{GIT_INIT} && echo n > new && git add new");
+    let conflict = format!(
+        "{GIT_INIT} && git checkout -q -b other && echo o > case.txt && git commit -q -am o \
+         && git checkout -q main && echo m > case.txt && git commit -q -am m \
+         && {{ git merge -q other > /dev/null 2>&1 || true; }}"
+    );
+    let cases = [
+        (staged.as_str(), "git reset -q HEAD app.log"),
+        (staged.as_str(), "git reset -q HEAD 'my file.txt'"),
+        (staged.as_str(), "git reset -q HEAD ."),
+        (new_file.as_str(), "git reset HEAD new"),
+        (conflict.as_str(), "git reset -q HEAD case.txt"),
+    ];
+    assert_same_git_state("reset-restore", &cases);
+}
+
+#[test]
+fn git_restore_staged_does_not_list_the_unstaged_changes() {
+    let (original, suggestion) = ("git reset HEAD app.log", "git restore --staged app.log");
+    assert_eq!(suggest(original).as_deref(), Some(suggestion));
+    let setup = format!("{GIT_INIT} && echo more >> app.log && git add app.log");
+    let (before, after) = (
+        fixtures("reset-restore-listing-original"),
+        fixtures("reset-restore-listing-suggestion"),
+    );
+    let mut outputs = Vec::new();
+    for (dir, command) in [(&before, original), (&after, suggestion)] {
+        assert_eq!(sh(dir, &setup).status.code(), Some(0), "setup");
+        let output = sh(dir, command);
+        assert_eq!(output.status.code(), Some(0), "command: {command:?}");
+        outputs.push(output.stdout);
+    }
+    assert_eq!(
+        outputs,
+        [
+            b"Unstaged changes after reset:\nM\tapp.log\n".to_vec(),
+            Vec::new()
+        ]
+    );
+    assert_eq!(sh(&after, GIT_STATE).stdout, sh(&before, GIT_STATE).stdout);
+    assert_eq!(worktree(&after), worktree(&before));
+    fs::remove_dir_all(before).expect("remove fixture dir");
+    fs::remove_dir_all(after).expect("remove fixture dir");
+}
+
+#[test]
+fn git_restore_staged_fails_on_unknown_paths_so_it_must_end_the_chain() {
+    assert_eq!(suggest("git reset HEAD missing && touch marker"), None);
+    let (original, suggestion) = ("git reset HEAD missing", "git restore --staged missing");
+    assert_eq!(suggest(original).as_deref(), Some(suggestion));
+    let (before, after) = (
+        fixtures("reset-restore-unknown-original"),
+        fixtures("reset-restore-unknown-suggestion"),
+    );
+    let mut codes = Vec::new();
+    for (dir, command) in [(&before, original), (&after, suggestion)] {
+        assert_eq!(sh(dir, GIT_INIT).status.code(), Some(0), "setup");
+        codes.push(sh(dir, command).status.code());
+    }
+    assert_eq!(codes, [Some(0), Some(1)], "{original:?} vs {suggestion:?}");
+    fs::remove_dir_all(before).expect("remove fixture dir");
+    fs::remove_dir_all(after).expect("remove fixture dir");
+}
+
+#[test]
+fn several_paths_and_captured_listings_are_not_unstaged_with_restore() {
+    let pairs = [
+        (
+            "git reset HEAD app.log missing",
+            "git restore --staged app.log missing",
+        ),
+        (
+            "git reset HEAD app.log > report",
+            "git restore --staged app.log > report",
+        ),
+        (
+            "git reset HEAD app.log | tee report",
+            "git restore --staged app.log | tee report",
+        ),
+    ];
+    let setup = format!("{GIT_INIT} && echo more >> app.log && git add app.log");
+    for (i, (original, restored)) in pairs.iter().enumerate() {
+        assert_eq!(suggest(original), None, "original: {original:?}");
+        let (before, after) = (
+            fixtures(&format!("reset-restore-excluded-{i}")),
+            fixtures(&format!("reset-restore-restored-{i}")),
+        );
+        let mut results = Vec::new();
+        for (dir, command) in [(&before, *original), (&after, *restored)] {
+            assert_eq!(sh(dir, &setup).status.code(), Some(0), "setup");
+            let output = sh(dir, command);
+            let report = fs::read(dir.join("report")).unwrap_or_default();
+            results.push((output.stdout, report, sh(dir, GIT_STATE).stdout));
+        }
+        assert_ne!(results[0], results[1], "{original:?} vs {restored:?}");
+        fs::remove_dir_all(before).expect("remove fixture dir");
+        fs::remove_dir_all(after).expect("remove fixture dir");
+    }
+}
+
+#[test]
+fn git_restore_staged_runs_the_post_checkout_hook() {
+    let (original, suggestion) = ("git reset -q HEAD app.log", "git restore --staged app.log");
+    assert_eq!(suggest(original).as_deref(), Some(suggestion));
+    let setup = format!(
+        "{GIT_INIT} && echo more >> app.log && git add app.log \
+         && printf '#!/bin/sh\\necho hook\\nexit 3\\n' > .git/hooks/post-checkout \
+         && chmod +x .git/hooks/post-checkout"
+    );
+    let (before, after) = (
+        fixtures("reset-restore-hook-original"),
+        fixtures("reset-restore-hook-suggestion"),
+    );
+    let mut results = Vec::new();
+    for (dir, command) in [(&before, original), (&after, suggestion)] {
+        assert_eq!(sh(dir, &setup).status.code(), Some(0), "setup");
+        let output = sh(dir, command);
+        results.push((output.status.code(), output.stdout, output.stderr));
+    }
+    let hook = (Some(3), Vec::new(), b"hook\n".to_vec());
+    assert_eq!(results, [(Some(0), Vec::new(), Vec::new()), hook]);
+    assert_eq!(sh(&after, GIT_STATE).stdout, sh(&before, GIT_STATE).stdout);
+    fs::remove_dir_all(before).expect("remove fixture dir");
+    fs::remove_dir_all(after).expect("remove fixture dir");
+}
+
+#[test]
+fn reset_with_a_separator_is_not_unstaged_with_restore_before_the_first_commit() {
+    let (original, restored) = ("git reset HEAD -- app.log", "git restore --staged app.log");
+    assert_eq!(suggest(original), None);
+    let setup = "git init -q -b main && git add app.log";
+    let (before, after) = (
+        fixtures("reset-restore-unborn-original"),
+        fixtures("reset-restore-unborn-restored"),
+    );
+    let mut results = Vec::new();
+    for (dir, command) in [(&before, original), (&after, restored)] {
+        assert_eq!(sh(dir, setup).status.code(), Some(0), "setup");
+        let code = sh(dir, command).status.code();
+        results.push((code, sh(dir, "git diff --cached --name-only").stdout));
+    }
+    assert_eq!(
+        results,
+        [(Some(0), Vec::new()), (Some(128), b"app.log\n".to_vec())]
+    );
+    fs::remove_dir_all(before).expect("remove fixture dir");
+    fs::remove_dir_all(after).expect("remove fixture dir");
+}

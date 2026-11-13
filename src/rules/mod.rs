@@ -37,6 +37,7 @@ const RULES: &[Rule] = &[git::stash::check, bundle_flags::check];
 // stages does: `cat missing | sort` exits 0 with sort's status, `sort missing` exits 2.
 const LAST_PIPELINE_RULES: &[Rule] = &[
     git::checkout::check,
+    git::reset::check,
     text::useless_cat::check,
     text::sort_uniq::check,
     text::grep_count::check,
@@ -242,6 +243,7 @@ mod tests {
             ),
             ("ls -l -a && cat f | grep x", "ls -la && cat f | grep x"),
             ("ls && git checkout -b x", "ls && git switch -c x"),
+            ("ls && git reset HEAD f", "ls && git restore --staged f"),
             ("ls -l -a && exec > out", "ls -la && exec > out"),
             ("echo exec && cat f | grep x", "echo exec && grep x f"),
             (
@@ -275,6 +277,7 @@ mod tests {
             "touch a && setopt x && touch b",
             "cd .. && cd .. && exec > out",
             "git checkout -b x && touch marker",
+            "git reset HEAD f && touch marker",
             "git checkout -- f && ls",
             "git branch x && git checkout x && exec > out",
             "setopt auto_pushd && cd .. && cd ..",
