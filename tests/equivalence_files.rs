@@ -131,3 +131,15 @@ fn one_cd_climbs_to_the_same_directory() {
     }
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
+
+#[test]
+fn mkdir_p_creates_the_same_parents() {
+    let originals = [
+        "mkdir new && mkdir new/a",
+        "mkdir -p new && mkdir -p new/a && mkdir -p new/a/b",
+        "mkdir -p src && mkdir -p src/x",
+        "mkdir 'my dir' && mkdir -p 'my dir/sub/deeper'",
+        "mkdir new && mkdir new/a && ls -R new",
+    ];
+    assert_same_files("mkdir-parents", &originals);
+}

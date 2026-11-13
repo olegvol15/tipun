@@ -2,6 +2,7 @@ mod bundle_flags;
 mod cd_parent;
 mod git;
 mod merge_repeated;
+mod mkdir_parents;
 #[cfg(test)]
 mod testing;
 mod text;
@@ -26,6 +27,7 @@ type Rule = fn(&Pipeline) -> Option<Rewrite>;
 type ChainRule = fn(chain: &Chain, usable: usize) -> Option<Suggestion>;
 
 const CHAIN_RULES: &[ChainRule] = &[
+    mkdir_parents::check,
     merge_repeated::check,
     cd_parent::check,
     git::branch_switch::check,
@@ -255,6 +257,8 @@ mod tests {
                 "touch a b && cat f | grep x",
             ),
             ("ls && cd .. && cd ..", "ls && cd ../.."),
+            ("mkdir -p a && mkdir -p a/b", "mkdir -p a/b"),
+            ("mkdir -p a && mkdir -p b", "mkdir -p a b"),
             (
                 "ls && git branch x && git checkout x",
                 "ls && git switch -c x",
