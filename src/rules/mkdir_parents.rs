@@ -2,6 +2,8 @@ use crate::lexer::Word;
 use crate::parser::{Chain, Command, Pipeline};
 use crate::rules::{Suggestion, word};
 
+// Documented exception: mkdir -p gives parents owner write and search, so under a umask such as
+// 0300 they get 0777 where the original, run as root or allowed by an ACL, leaves 0477.
 pub fn check(chain: &Chain, usable: usize) -> Option<Suggestion> {
     let paths: Vec<Option<&Word>> = chain.pipelines[..usable].iter().map(path).collect();
     let mut start = 0;

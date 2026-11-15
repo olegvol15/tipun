@@ -1,6 +1,7 @@
 mod common;
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 
 use common::{assert_same_files, assert_same_output, fixtures, sh, suggest};
@@ -142,4 +143,24 @@ fn mkdir_p_creates_the_same_parents() {
         "mkdir new && mkdir new/a && ls -R new",
     ];
     assert_same_files("mkdir-parents", &originals);
+}
+
+#[test]
+fn mkdir_p_parents_differ_under_a_umask_without_owner_write() {
+    let original = "mkdir new && mkdir new/a";
+    let suggestion = suggest(original).expect("tipun suggests mkdir -p");
+    let mut modes = Vec::new();
+    for (i, command) in [original, suggestion.as_str()].iter().enumerate() {
+        let dir = fixtures(&format!("mkdir-umask-{i}"));
+        sh(&dir, &format!("umask 0300; {command}"));
+        let mode = fs::metadata(dir.join("new"))
+            .expect("stat new")
+            .permissions()
+            .mode()
+            & 0o777;
+        modes.push(mode);
+        sh(&dir, "chmod -R u+wx new");
+        fs::remove_dir_all(&dir).expect("remove fixture dir");
+    }
+    assert_eq!(modes, [0o477, 0o777]);
 }
