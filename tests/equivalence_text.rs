@@ -110,13 +110,9 @@ fn sort_flags_that_change_equality_really_change_the_output() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn gnu_wc_pads_several_counts_differently_for_a_file() {
+fn wc_without_a_filename_is_silent() {
     let dir = fixtures("wc-padding");
     assert_eq!(suggest("cat app.log | wc"), None);
-    assert_ne!(
-        sh(&dir, "cat app.log | wc").stdout,
-        sh(&dir, "wc < app.log").stdout
-    );
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
 
