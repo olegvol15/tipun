@@ -389,3 +389,15 @@ fn grep_head_without_matches_differs_only_in_exit_status() {
     assert_eq!((actual.stdout.len(), actual.status.code()), (0, Some(1)));
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
+
+#[test]
+fn grep_head_excluded_flags_really_change_the_output() {
+    let dir = fixtures("grep-head-excluded");
+    fs::write(dir.join("repeated.txt"), "xx\n").expect("write repeated.txt");
+    let pairs = [(
+        "grep -o x repeated.txt | head -n 1",
+        "grep -m 1 -o x repeated.txt",
+    )];
+    assert_excluded_and_different(&dir, &pairs);
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}

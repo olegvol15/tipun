@@ -15,7 +15,6 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 use lexer::{Redirect, Word};
 use parser::Chain;
-use rules::Suggestion;
 
 #[derive(Parser)]
 #[command(name = "tipun", version)]
@@ -123,7 +122,7 @@ fn update(quiet: bool) -> ExitCode {
 }
 
 fn suggest(command: &str) -> ExitCode {
-    match find_rewrite(command) {
+    match parse(command).and_then(|chain| rules::rewrite(&chain)) {
         Some(rewrite) => {
             println!("{}", render::render(&rewrite.chain));
             ExitCode::SUCCESS
@@ -150,7 +149,10 @@ fn analyze(command: &str, expanded: &Expanded, exit_code: i32, columns: Option<&
     if exit_code != 0 {
         return;
     }
-    let Some(rewrite) = find_rewrite(command) else {
+    let Some(chain) = parse(command) else {
+        return;
+    };
+    let Some(rewrite) = rules::rewrite(&chain) else {
         return;
     };
     let from_aliases;
@@ -176,6 +178,15 @@ fn analyze(command: &str, expanded: &Expanded, exit_code: i32, columns: Option<&
         }
         return;
     }
+    // A color alias is harmless while grep writes to a pipe, not once a rewrite makes it the end.
+    if expanded.is_some_and(expanded::colors_grep)
+        && pipelines_ending_in_grep(&rewrite.chain) > pipelines_ending_in_grep(&chain)
+    {
+        if debug() {
+            eprintln!("grep would color the suggestion's output");
+        }
+        return;
+    }
     let suggestion = render::render(&rewrite.chain);
     eprint!(
         "{}",
@@ -195,7 +206,20 @@ fn terminal(columns: Option<&str>) -> Option<tip::Terminal> {
     })
 }
 
-fn find_rewrite(command: &str) -> Option<Suggestion> {
+fn pipelines_ending_in_grep(chain: &Chain) -> usize {
+    chain
+        .pipelines
+        .iter()
+        .filter(|pipeline| {
+            pipeline
+                .stages
+                .last()
+                .is_some_and(|stage| stage.name.value == "grep")
+        })
+        .count()
+}
+
+fn parse(command: &str) -> Option<Chain> {
     let tokens = match lexer::lex(command) {
         Ok(tokens) => tokens,
         Err(err) => {
@@ -217,7 +241,7 @@ fn find_rewrite(command: &str) -> Option<Suggestion> {
     if debug() {
         print_chain(&chain);
     }
-    rules::rewrite(&chain)
+    Some(chain)
 }
 
 fn debug() -> bool {
