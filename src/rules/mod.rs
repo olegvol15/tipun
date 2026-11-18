@@ -44,6 +44,7 @@ const LAST_PIPELINE_RULES: &[Rule] = &[
     text::sort_uniq::check,
     text::grep_count::check,
     text::grep_head::check,
+    text::grep_v_merge::check,
 ];
 
 // Builtins that change how later commands run (`exec > out` redirects everything after it), and
