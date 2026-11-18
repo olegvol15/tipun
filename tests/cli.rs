@@ -196,6 +196,36 @@ fn analyze_is_silent_when_aliases_change_the_command() {
 }
 
 #[test]
+fn analyze_is_silent_when_a_color_alias_would_reach_the_terminal() {
+    let command = "--command=grep ERROR app.log | head -n 2";
+    let tip = "tipun tip: grep -m 2 ERROR app.log\n  grep -m stops after the first matching lines, no need for head.\n";
+    let cases = [
+        ("--expanded=grep ERROR app.log | head -n 2", tip),
+        ("--expanded=grep --color=auto ERROR app.log | head -n 2", ""),
+        (
+            "--expanded=grep --colour=auto ERROR app.log | head -n 2",
+            "",
+        ),
+        ("--aliases=alias grep='grep --color=auto'\n", ""),
+    ];
+    for (expanded, expected) in cases {
+        let output = tipun(&["analyze", command, expanded]);
+        assert_eq!(output.status.code(), Some(0), "{expanded:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            expected,
+            "{expanded:?}"
+        );
+    }
+    let count = [
+        "analyze",
+        "--command=grep ERROR app.log | wc -l",
+        "--expanded=grep --color=auto ERROR app.log | wc -l",
+    ];
+    assert!(tipun(&count).stderr.is_empty());
+}
+
+#[test]
 fn analyze_expands_bash_aliases() {
     let command = "--command=cat app.log | grep ERROR";
     let tip = "tipun tip: grep ERROR app.log\n  grep can read the file itself, no need for cat.\n";

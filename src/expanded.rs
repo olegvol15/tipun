@@ -68,6 +68,12 @@ pub fn matches_typed(typed: &str, expanded: &str) -> bool {
         })
 }
 
+pub fn colors_grep(expanded: &str) -> bool {
+    expanded
+        .split(' ')
+        .any(|chunk| matches!(chunk, "--color=auto" | "--colour=auto"))
+}
+
 fn drop_harmless_grep_options(expanded: &str) -> String {
     let mut kept: Vec<&str> = Vec::new();
     let mut at_command = true;
@@ -212,6 +218,14 @@ alias sudo='sudo '
                 "{typed:?} with {aliases:?}"
             );
         }
+    }
+
+    #[test]
+    fn detects_a_grep_color_option() {
+        assert!(colors_grep("grep --color=auto x f | head"));
+        assert!(colors_grep("grep --colour=auto x f"));
+        assert!(!colors_grep("grep x f | head"));
+        assert!(!colors_grep("grep --color=always x f"));
     }
 
     #[test]

@@ -40,6 +40,7 @@ Early development, zsh and bash. tipun knows a small set of rewrites:
 | `cat file \| wc -l` | `wc -l < file` |
 | `sort file \| uniq` | `sort -u file` |
 | `grep x file \| wc -l` | `grep -c x file` |
+| `grep x file \| head -n 5` | `grep -m 5 x file` |
 | `ls -l -a`, `rm -r -f dir` | `ls -la`, `rm -rf dir` |
 | `git checkout -b x`, `git checkout -- f` | `git switch -c x`, `git restore f` |
 | `git stash save wip` | `git stash push -m wip` |

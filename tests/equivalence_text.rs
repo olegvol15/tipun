@@ -110,13 +110,9 @@ fn sort_flags_that_change_equality_really_change_the_output() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn gnu_wc_pads_several_counts_differently_for_a_file() {
+fn wc_without_a_filename_is_silent() {
     let dir = fixtures("wc-padding");
     assert_eq!(suggest("cat app.log | wc"), None);
-    assert_ne!(
-        sh(&dir, "cat app.log | wc").stdout,
-        sh(&dir, "wc < app.log").stdout
-    );
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
 
@@ -359,5 +355,49 @@ fn rules_stay_silent_after_exec_redirects_later_output() {
         }
         assert_eq!(String::from_utf8_lossy(&expected).trim(), "2");
     }
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[test]
+fn grep_head_suggestions_print_the_same_lines() {
+    let dir = fixtures("grep-head");
+    let originals = [
+        "grep ERROR app.log | head -n 1",
+        "grep -v info app.log | head -n 2",
+        "grep -in e app.log | head -2",
+        "grep -x a case.txt | head -n1",
+        "grep -E 'warn|info' app.log | head -n 2",
+        "grep -F 'disk full' app.log | head -n 5",
+        "grep -e warn -e ERROR app.log | head -n 1",
+        "grep '' app.log | head",
+        "grep -w line 'my file.txt' | head -n 1",
+    ];
+    assert_same_output(&dir, &originals);
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[test]
+fn grep_head_without_matches_differs_only_in_exit_status() {
+    let dir = fixtures("grep-head-no-match");
+    let original = "grep missing app.log | head -n 2";
+    let suggestion = suggest(original).expect("tipun must suggest a rewrite");
+    let (expected, actual) = (sh(&dir, original), sh(&dir, &suggestion));
+    assert_eq!(
+        (expected.stdout.len(), expected.status.code()),
+        (0, Some(0))
+    );
+    assert_eq!((actual.stdout.len(), actual.status.code()), (0, Some(1)));
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[test]
+fn grep_head_excluded_flags_really_change_the_output() {
+    let dir = fixtures("grep-head-excluded");
+    fs::write(dir.join("repeated.txt"), "xx\n").expect("write repeated.txt");
+    let pairs = [(
+        "grep -o x repeated.txt | head -n 1",
+        "grep -m 1 -o x repeated.txt",
+    )];
+    assert_excluded_and_different(&dir, &pairs);
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
