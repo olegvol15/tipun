@@ -38,6 +38,7 @@ fn merge(grep: &Command, wc: &Command) -> Option<Command> {
     }
     if !grep.redirects.is_empty()
         || crate::rules::reads_redirected_input(wc)
+        || crate::rules::redirects_stderr(wc)
         || wc.redirects.iter().any(writes_stdout)
     {
         return None;
@@ -89,8 +90,6 @@ mod tests {
             ("grep '' f | wc -l", "grep -c '' f"),
             ("cat f | grep x | wc -l", "cat f | grep -c x"),
             ("sort f | grep x | wc -l", "sort f | grep -c x"),
-            ("grep x f | wc -l 2> err", "grep -c x f 2> err"),
-            ("grep x f | wc -l 2>&1", "grep -c x f 2>&1"),
             ("grep x f | wc -l 2>/dev/null", "grep -c x f 2> /dev/null"),
             (
                 "sort f > sorted | grep x | wc -l",
@@ -125,6 +124,9 @@ mod tests {
             "grep x f | wc -l >> count",
             "grep x f | wc -l 1> count",
             "grep x f | wc -l 2> err > count",
+            "grep x f | wc -l 2> err",
+            "grep x f | wc -l 2>> err",
+            "grep x f | wc -l 2>&1",
             "grep x f | wc -l 1>&2",
             "tr a b < f | grep x | wc -l > f",
             "grep x f | wc -l 0> out",
@@ -179,7 +181,7 @@ mod tests {
         let inputs = [
             "grep x f | wc -l",
             "cat f | grep -e x | wc -l",
-            "grep x f | wc -l 2> err",
+            "grep x f | wc -l 2>/dev/null",
         ];
         assert_stable(check, &inputs);
     }

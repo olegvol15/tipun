@@ -401,3 +401,90 @@ fn grep_head_excluded_flags_really_change_the_output() {
     assert_excluded_and_different(&dir, &pairs);
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
+
+#[test]
+fn grep_v_merge_suggestions_drop_the_same_lines() {
+    let dir = fixtures("grep-v-merge");
+    let originals = [
+        "grep -v info app.log | grep -v ERROR",
+        "grep -vi error app.log | grep -iv warn",
+        "grep -v info app.log | grep -v ERROR | grep -v disk",
+        "grep -vw b 'my file.txt' | grep -vw first",
+        "grep -vx a case.txt | grep -vx B",
+        "grep -vF 'disk full' app.log | grep -vF info",
+        "grep -vE 'warn|info' app.log | grep -vE '^e'",
+        "cat app.log | grep -v info | grep -v ERROR | sort",
+        "grep -v 2 < numbers.txt | grep -v 01",
+    ];
+    assert_same_output(&dir, &originals);
+    for original in [
+        "grep -v '' app.log | grep -v x",
+        "grep -v e app.log | grep -v r",
+    ] {
+        let suggestion = suggest(original).expect("tipun must suggest a rewrite");
+        let (expected, actual) = (sh(&dir, original), sh(&dir, &suggestion));
+        assert_eq!(actual.stdout, expected.stdout, "{original:?}");
+        assert_eq!(actual.status.code(), expected.status.code(), "{original:?}");
+    }
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[test]
+fn grep_v_merge_excluded_flags_really_change_the_output() {
+    let dir = fixtures("grep-v-merge-excluded");
+    let pairs = [
+        (
+            "grep -vn info app.log | grep -vn ERROR",
+            "grep -vn -e info -e ERROR app.log",
+        ),
+        (
+            "grep -v info app.log | grep -vi error",
+            "grep -v -e info -e error app.log",
+        ),
+    ];
+    assert_excluded_and_different(&dir, &pairs);
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn bsd_grep_uses_the_last_of_e_and_f() {
+    let dir = fixtures("grep-v-merge-e-f");
+    fs::write(dir.join("dots.txt"), "a.b\naxb\nkeep\n").expect("write dots.txt");
+    let pairs = [(
+        "grep -vEF z dots.txt | grep -vFE a.b",
+        "grep -vEF -e z -e a.b dots.txt",
+    )];
+    assert_excluded_and_different(&dir, &pairs);
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[test]
+fn merged_greps_write_the_same_redirected_files() {
+    let originals = [
+        "grep -v info app.log | grep -v ERROR > out.txt",
+        "grep -v info app.log | grep -v ERROR >> app.log.out",
+        "grep -v info app.log | grep -v ERROR 2>/dev/null",
+        "grep ERROR app.log | head -n 1 > out.txt",
+        "grep ERROR app.log | head -n 1 2>/dev/null",
+    ];
+    assert_same_files("grep-redirects", &originals);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn gnu_grep_warnings_stay_out_of_a_merged_stdout() {
+    let dir = fixtures("grep-stderr");
+    let pairs = [
+        (
+            "grep -vE '*a' app.log | grep -vE z 2>&1",
+            "grep -vE -e '*a' -e z app.log 2>&1",
+        ),
+        (
+            "grep -E '*a|ERROR' app.log | head -n 1 2>&1",
+            "grep -m 1 -E '*a|ERROR' app.log 2>&1",
+        ),
+    ];
+    assert_excluded_and_different(&dir, &pairs);
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
