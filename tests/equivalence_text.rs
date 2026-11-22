@@ -445,3 +445,16 @@ fn grep_v_merge_excluded_flags_really_change_the_output() {
     assert_excluded_and_different(&dir, &pairs);
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn bsd_grep_uses_the_last_of_e_and_f() {
+    let dir = fixtures("grep-v-merge-e-f");
+    fs::write(dir.join("dots.txt"), "a.b\naxb\nkeep\n").expect("write dots.txt");
+    let pairs = [(
+        "grep -vEF z dots.txt | grep -vFE a.b",
+        "grep -vEF -e z -e a.b dots.txt",
+    )];
+    assert_excluded_and_different(&dir, &pairs);
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}

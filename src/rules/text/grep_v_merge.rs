@@ -72,6 +72,9 @@ fn exclusion(command: &Command) -> Option<Exclusion<'_>> {
     }
     let split = args::split(&command.args, &GREP)?;
     let mut flags = split.flags;
+    if flags.contains(&'E') && flags.contains(&'F') {
+        return None;
+    }
     flags.sort_unstable();
     flags.dedup();
     if !flags.contains(&'v') {
@@ -171,6 +174,8 @@ mod tests {
             "grep -vA 1 x f | grep -v y",
             "grep -v x f | grep -v y -m 1",
             "grep -vr x f | grep -vr y",
+            "grep -vEF z f | grep -vFE a.b",
+            "grep -vE -F z f | grep -vE -F a.b",
             "grep --invert-match x f | grep -v y",
             "grep -v --color=auto x f | grep -v y",
             "egrep -v x f | egrep -v y",
