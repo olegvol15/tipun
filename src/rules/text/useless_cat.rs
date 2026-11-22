@@ -23,6 +23,14 @@ const WC: Spec = Spec {
     flags: "lwcm",
     with_value: "",
 };
+const CUT: Spec = Spec {
+    flags: "s",
+    with_value: "bcdf",
+};
+const SED: Spec = Spec {
+    flags: "nEr",
+    with_value: "",
+};
 const TR: Spec = Spec {
     flags: "cds",
     with_value: "",
@@ -88,6 +96,8 @@ fn file_input(command: &Command) -> Option<FileInput> {
         "uniq" => &UNIQ,
         "wc" => &WC,
         "tr" => &TR,
+        "cut" => &CUT,
+        "sed" => &SED,
         _ => return None,
     };
     let args = args::split(&command.args, spec)?;
@@ -97,6 +107,9 @@ fn file_input(command: &Command) -> Option<FileInput> {
         // GNU wc pads several counts to a width taken from the file size, but not for a pipe.
         "wc" => operands == 0 && args.flags.len() == 1,
         "tr" => (1..=2).contains(&operands),
+        // GNU sed's F command prints the file name, which is - for stdin.
+        "cut" => operands == 0 && args.flags.iter().any(|flag| "bcf".contains(*flag)),
+        "sed" => matches!(args.operands.as_slice(), [script] if !script.value.contains('F')),
         _ => operands == 0,
     };
     let input = match name {
@@ -154,6 +167,16 @@ mod tests {
             ("cat f | tr -s ' '", "tr -s ' ' < f"),
             ("cat f | tr -cd a-z", "tr -cd a-z < f"),
             ("cat f | tr a b | sort", "tr a b < f | sort"),
+            ("cat f | cut -d , -f 2", "cut -d , -f 2 f"),
+            ("cat f | cut -d, -f1,3", "cut -d, -f1,3 f"),
+            ("cat f | cut -c 1-3", "cut -c 1-3 f"),
+            ("cat f | cut -b 2", "cut -b 2 f"),
+            ("cat f | cut -sd , -f 2", "cut -sd , -f 2 f"),
+            ("cat f | sed 's/a/b/'", "sed 's/a/b/' f"),
+            ("cat f | sed -n 2p", "sed -n 2p f"),
+            ("cat f | sed -E 's/(a)/\\1/'", "sed -E 's/(a)/\\1/' f"),
+            ("cat f | sed -nr '/x/p'", "sed -nr '/x/p' f"),
+            ("cat f | sed q | sort", "sed q f | sort"),
             ("cat f | grep x | wc -l", "grep x f | wc -l"),
             ("cat f | grep x > out", "grep x f > out"),
             ("cat f | grep x >> out", "grep x f >> out"),
@@ -231,6 +254,25 @@ mod tests {
             "cat f | sort g",
             "cat f | uniq in",
             "cat f | uniq in out",
+            "cat f | cut -f 1 g",
+            "cat f | cut",
+            "cat f | cut -f",
+            "cat f | cut --complement -f 1",
+            "cat f | cut -z -f 1",
+            "cat f | cut -f 1 -",
+            "cat f | sed",
+            "cat f | sed s/a/b/ g",
+            "cat f | sed -e s/a/b/",
+            "cat f | sed -f script",
+            "cat f | sed -i s/a/b/",
+            "cat f | sed -i '' s/a/b/",
+            "cat f | sed -s s/a/b/",
+            "cat f | sed -u s/a/b/",
+            "cat f | sed -z s/a/b/",
+            "cat f | sed --posix s/a/b/",
+            "cat f | sed F",
+            "cat f | sed -n '1F'",
+            "cat f | sed 's/F/x/'",
         ];
         assert_silent(check, &cases);
     }
