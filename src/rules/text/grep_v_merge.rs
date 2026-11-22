@@ -64,6 +64,7 @@ fn joins(exclusions: &[Option<Exclusion>], stages: &[Command], i: usize) -> bool
             .iter()
             .all(|redirect| redirect.op == Redirect::In)
         && !crate::rules::reads_redirected_input(&stages[i + 1])
+        && !crate::rules::redirects_stderr(&stages[i + 1])
 }
 
 fn exclusion(command: &Command) -> Option<Exclusion<'_>> {
@@ -134,8 +135,8 @@ mod tests {
             ),
             ("grep -v x f | grep -v y > out", "grep -v -e x -e y f > out"),
             (
-                "grep -v x f | grep -v y 2> err",
-                "grep -v -e x -e y f 2> err",
+                "grep -v x f | grep -v y 2>/dev/null",
+                "grep -v -e x -e y f 2> /dev/null",
             ),
             ("grep -v x < f | grep -v y", "grep -v -e x -e y < f"),
         ];
@@ -156,6 +157,9 @@ mod tests {
             "grep -v x f | sort | grep -v y",
             "grep -v x f > out | grep -v y",
             "grep -v x f 2> err | grep -v y",
+            "grep -v x f | grep -v y 2> err",
+            "grep -v x f | grep -v y 2>&1",
+            "grep -v x f | grep -v y > out 2>&1",
             "grep -v x f | grep -v y < g",
             "grep -v x f | grep -v y > f",
             "grep -v x f | grep -v y 0> out",

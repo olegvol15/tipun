@@ -17,6 +17,7 @@ pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
         return None;
     }
     if crate::rules::reads_redirected_input(head)
+        || crate::rules::redirects_stderr(head)
         || !crate::rules::only_harmless_redirects(pipeline)
     {
         return None;
@@ -84,7 +85,10 @@ mod tests {
             ),
             ("grep x f | head -n 2 > out", "grep -m 2 x f > out"),
             ("grep x f | head -n 2 >> out", "grep -m 2 x f >> out"),
-            ("grep x f | head -n 2 2> err", "grep -m 2 x f 2> err"),
+            (
+                "grep x f | head -n 2 2>/dev/null",
+                "grep -m 2 x f 2> /dev/null",
+            ),
         ];
         assert_rewrites(check, &cases);
     }
@@ -103,6 +107,9 @@ mod tests {
             "grep x f -i | head -n 2",
             "grep x < f | head -n 2",
             "grep x f 2> err | head -n 2",
+            "grep x f | head -n 2 2> err",
+            "grep x f | head -n 2 2>&1",
+            "grep x f | head -n 2 > out 2>&1",
             "cat f | grep x | head -n 2",
             "tee out < f | grep x | head -n 2",
             "grep x f | head -n 2 | sort",

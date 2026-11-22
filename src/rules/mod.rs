@@ -186,6 +186,21 @@ fn reads_redirected_input(command: &Command) -> bool {
         .any(|redirect| redirect.op == Redirect::In)
 }
 
+// A stage merged into grep hands its stderr redirect to grep, whose warnings then land there.
+fn redirects_stderr(command: &Command) -> bool {
+    command.redirects.iter().any(|redirect| match redirect.op {
+        Redirect::Out { fd } | Redirect::Append { fd } => {
+            fd == Some(2)
+                && redirect
+                    .target
+                    .as_ref()
+                    .is_none_or(|target| target.value != "/dev/null")
+        }
+        Redirect::Dup { fd, .. } => fd == 2,
+        Redirect::In => false,
+    })
+}
+
 fn is_harmless(redirect: &Redirection, names: &[&str]) -> bool {
     let fd_is_output = |fd: Option<u8>| matches!(fd, None | Some(1 | 2));
     match redirect.op {

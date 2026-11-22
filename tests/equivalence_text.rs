@@ -458,3 +458,33 @@ fn bsd_grep_uses_the_last_of_e_and_f() {
     assert_excluded_and_different(&dir, &pairs);
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
+
+#[test]
+fn merged_greps_write_the_same_redirected_files() {
+    let originals = [
+        "grep -v info app.log | grep -v ERROR > out.txt",
+        "grep -v info app.log | grep -v ERROR >> app.log.out",
+        "grep -v info app.log | grep -v ERROR 2>/dev/null",
+        "grep ERROR app.log | head -n 1 > out.txt",
+        "grep ERROR app.log | head -n 1 2>/dev/null",
+    ];
+    assert_same_files("grep-redirects", &originals);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn gnu_grep_warnings_stay_out_of_a_merged_stdout() {
+    let dir = fixtures("grep-stderr");
+    let pairs = [
+        (
+            "grep -vE '*a' app.log | grep -vE z 2>&1",
+            "grep -vE -e '*a' -e z app.log 2>&1",
+        ),
+        (
+            "grep -E '*a|ERROR' app.log | head -n 1 2>&1",
+            "grep -m 1 -E '*a|ERROR' app.log 2>&1",
+        ),
+    ];
+    assert_excluded_and_different(&dir, &pairs);
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
