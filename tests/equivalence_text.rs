@@ -1,8 +1,9 @@
 mod common;
 
 use std::fs;
+use std::io::Write;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use common::{
     assert_excluded_and_different, assert_same_files, assert_same_output, fixtures, sh, suggest,
@@ -38,6 +39,17 @@ fn useless_cat_suggestions_match_the_original() {
         "cat app.log | wc -m",
         "cat 'my file.txt' | wc -l",
         "cat app.log | grep ERROR | wc -l",
+        "cat app.log | cut -d ' ' -f 2",
+        "cat app.log | cut -c 1-5",
+        "cat app.log | cut -s -d , -f 1",
+        "cat 'my file.txt' | cut -b 3-",
+        "cat app.log | sed 's/ERROR/E/'",
+        "cat app.log | sed -n '2,3p'",
+        "cat app.log | sed -E 's/(warn) ([0-9]+)/\\2 \\1/'",
+        "cat app.log | sed -n '$='",
+        "cat app.log | sed '/error/,/warn 10/d'",
+        "cat app.log | sed 's|ERROR|E/R|g'",
+        "cat app.log | sed 3q | sort",
         "cat app.log | tr a-z A-Z",
         "cat app.log | tr -d 0-9",
         "cat app.log | tr -s ' '",
@@ -486,5 +498,32 @@ fn gnu_grep_warnings_stay_out_of_a_merged_stdout() {
         ),
     ];
     assert_excluded_and_different(&dir, &pairs);
+    fs::remove_dir_all(dir).expect("remove fixture dir");
+}
+
+#[test]
+fn sed_reading_stdin_by_name_is_excluded() {
+    let dir = fixtures("sed-stdin");
+    for script in ["r /dev/stdin", "r /dev/fd/0"] {
+        let original = format!("cat app.log | sed '{script}'");
+        assert_eq!(suggest(&original), None, "{original:?}");
+        let run = |command: &str| {
+            let mut child = Command::new("/bin/sh")
+                .args(["-c", command])
+                .current_dir(&dir)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .expect("run sh");
+            child
+                .stdin
+                .take()
+                .expect("stdin is piped")
+                .write_all(b"extra\n")
+                .expect("write stdin");
+            child.wait_with_output().expect("wait for sh").stdout
+        };
+        assert_ne!(run(&original), run(&format!("sed '{script}' app.log")));
+    }
     fs::remove_dir_all(dir).expect("remove fixture dir");
 }
