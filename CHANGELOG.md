@@ -4,6 +4,25 @@ All notable changes to tipun are documented in this file. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and tipun follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.4] - 2026-11-23
+
+### Added
+
+- bash support: add `eval "$(tipun init bash)"` to the end of `~/.bashrc`. Works with bash 3.2
+  (macOS) and later, keeps other `PROMPT_COMMAND` hooks, and stays silent when an alias changes
+  the command.
+- `git reset HEAD f` -> `git restore --staged f`.
+- `mkdir a && mkdir a/b` -> `mkdir -p a/b`.
+- `grep x file | head -n 5` -> `grep -m 5 x file`.
+- `grep -v x file | grep -v y` -> `grep -v -e x -e y file`.
+- `cat file | cut ...` and `cat file | sed ...` -> `cut ... file`, `sed ... file`.
+
+### Changed
+
+- `grep x f | wc -l` gets no tip when a `grep --color=auto` alias is active or when `wc` redirects
+  stderr (`2>&1`, `2> err`), because the suggested grep would then print color codes or its own
+  warnings there.
+
 ## [0.1.3] - 2026-11-11
 
 ### Added
