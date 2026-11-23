@@ -10,10 +10,12 @@ All notable changes to tipun are documented in this file. The format is based on
 
 - bash support: add `eval "$(tipun init bash)"` to the end of `~/.bashrc`. Works with bash 3.2
   (macOS) and later, keeps other `PROMPT_COMMAND` hooks, and stays silent when an alias changes
-  the command.
+  the command. Login shells (macOS Terminal starts bash as one) read `~/.bash_profile` instead, so
+  make sure it sources `~/.bashrc`.
 - `git reset HEAD f` -> `git restore --staged f`.
 - `mkdir a && mkdir a/b` -> `mkdir -p a/b`.
-- `grep x file | head -n 5` -> `grep -m 5 x file`.
+- `grep x file | head -n 5` -> `grep -m 5 x file` at the end of a chain. Unlike the original, the
+  suggestion exits 1 when nothing matches.
 - `grep -v x file | grep -v y` -> `grep -v -e x -e y file`.
 - `cat file | cut ...` and `cat file | sed ...` -> `cut ... file`, `sed ... file`.
 
