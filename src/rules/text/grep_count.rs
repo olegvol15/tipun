@@ -1,7 +1,7 @@
 use crate::args::{self, Spec};
 use crate::lexer::{Redirect, Word};
 use crate::parser::{Command, Pipeline, Redirection};
-use crate::rules::Rewrite;
+use crate::rules::{Rewrite, word};
 
 const GREP: Spec = Spec {
     flags: "ivwxEFs",
@@ -17,30 +17,19 @@ pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
     let [rest @ .., grep, wc] = pipeline.stages.as_slice() else {
         return None;
     };
-    let merged = merge(grep, wc)?;
-    if !crate::rules::only_harmless_redirects(pipeline) {
-        return None;
-    }
-    let mut stages = rest.to_vec();
-    stages.push(merged);
-    Some(Rewrite {
-        pipeline: Pipeline { stages },
-        explanation: "grep -c counts matching lines itself, no need for wc -l.".to_string(),
-    })
+    let args = count_args(grep, wc)?;
+    let explanation = "grep -c counts matching lines itself, no need for wc -l.";
+    crate::rules::absorb(pipeline, rest.len(), args, explanation)
 }
 
-fn merge(grep: &Command, wc: &Command) -> Option<Command> {
+fn count_args(grep: &Command, wc: &Command) -> Option<Vec<Word>> {
     if grep.name.value != "grep" || wc.name.value != "wc" {
         return None;
     }
     if !matches!(wc.args.as_slice(), [flag] if flag.value == "-l") {
         return None;
     }
-    if !grep.redirects.is_empty()
-        || crate::rules::reads_redirected_input(wc)
-        || crate::rules::redirects_stderr(wc)
-        || wc.redirects.iter().any(writes_stdout)
-    {
+    if crate::rules::redirects_stderr(wc) || wc.redirects.iter().any(writes_stdout) {
         return None;
     }
     let args = args::split(&grep.args, &GREP)?;
@@ -49,14 +38,9 @@ fn merge(grep: &Command, wc: &Command) -> Option<Command> {
     if files > 1 {
         return None;
     }
-    let mut merged = grep.clone();
-    merged.redirects = wc.redirects.clone();
-    let count = Word {
-        raw: "-c".to_string(),
-        value: "-c".to_string(),
-    };
-    merged.args.insert(0, count);
-    Some(merged)
+    let mut args = vec![word("-c")];
+    args.extend_from_slice(&grep.args);
+    Some(args)
 }
 
 fn writes_stdout(redirect: &Redirection) -> bool {

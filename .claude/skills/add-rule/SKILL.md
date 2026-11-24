@@ -41,7 +41,9 @@ Also check that the suggestion parses again and that the rule returns `None` on 
 - One file per rule, in the folder for its area: `src/rules/text/` (text filters such as cat,
   sort, grep), `src/rules/git/`, or `src/rules/` for rules that span areas. One plain function
   `fn check(pipeline: &Pipeline) -> Option<Rewrite>`. A rule that rewrites a single command uses
-  `rewrite_each_stage` from `src/rules/mod.rs`. A rule that joins several pipelines of an `&&`
+  `rewrite_each_stage` from `src/rules/mod.rs`; a rule that folds a stage into the one before it
+  (`grep | head` -> `grep -m`) builds the new arguments and calls `absorb`, which moves the
+  redirects and rejects unsafe ones. A rule that joins several pipelines of an `&&`
   chain is `fn check(chain: &Chain, usable: usize) -> Option<Suggestion>` in `CHAIN_RULES`: it may
   only rewrite the first `usable` pipelines (those before a shell-state builtin) but sees the
   whole chain. Test it with the `assert_chain_*` helpers.
@@ -57,6 +59,8 @@ Also check that the suggestion parses again and that the rule returns `None` on 
   with a different status, even on an error path, goes in `LAST_PIPELINE_RULES`: in `a && b`, the
   status decides if `b` runs. Merging pipeline stages always can (`cat missing | sort` exits 0).
 - Write a short, plain explanation string for the tip (no emoji).
+- Add a row to the README table (`You type | tipun suggests`). `rules::tests` checks every row
+  against the rules and fails if a registered rule has no row.
 
 ## 4. Differential test
 

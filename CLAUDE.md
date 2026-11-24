@@ -37,7 +37,9 @@ shell adapter (thin: zsh passes the raw and alias-expanded command, bash the raw
 - Words keep both `raw` (as typed, quotes included) and `value` (unquoted). Suggestions are
   rendered from `raw` so the user's quoting is preserved.
 - Rules are plain functions in a static list. Command knowledge stays local to each rule; there is
-  no global capability database, trait hierarchy or DSL.
+  no global capability database, trait hierarchy or DSL. Shared plumbing lives in
+  `src/rules/mod.rs` (`rewrite_each_stage`, `absorb` for merging a stage into the one before it,
+  the redirect checks).
 
 ## Rule safety
 
@@ -52,6 +54,8 @@ Every rule MUST have:
   checklist
 - positive, negative, edge-case and intentionally-silent unit tests
 - differential tests that run the original and the suggestion on fixtures and compare output
+- a row in the README table: a test checks every row against the rules and that every rule has
+  one
 
 Known traps: `wc FILE` prints the filename (use `wc < FILE`); `sort -u` is not `sort | uniq` with
 `-f`/`-n`/`-k`; `grep -c` is not `grep | wc -l` with `-o` or context flags; `grep -r` with no file

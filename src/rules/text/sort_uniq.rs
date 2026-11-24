@@ -1,7 +1,7 @@
 use crate::args::{self, Spec};
 use crate::lexer::Word;
 use crate::parser::{Command, Pipeline};
-use crate::rules::Rewrite;
+use crate::rules::{Rewrite, word};
 
 const SORT: Spec = Spec {
     flags: "ru",
@@ -9,40 +9,27 @@ const SORT: Spec = Spec {
 };
 
 pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
-    for (i, pair) in pipeline.stages.windows(2).enumerate() {
-        if let Some(merged) = merge(&pair[0], &pair[1]) {
-            if !crate::rules::only_harmless_redirects(pipeline) {
-                return None;
-            }
-            let mut stages = pipeline.stages.clone();
-            stages.splice(i..i + 2, [merged]);
-            return Some(Rewrite {
-                pipeline: Pipeline { stages },
-                explanation: "sort -u drops duplicate lines itself, no need for uniq.".to_string(),
-            });
-        }
-    }
-    None
+    pipeline
+        .stages
+        .windows(2)
+        .enumerate()
+        .find_map(|(i, pair)| {
+            let args = unique_args(&pair[0], &pair[1])?;
+            let explanation = "sort -u drops duplicate lines itself, no need for uniq.";
+            crate::rules::absorb(pipeline, i, args, explanation)
+        })
 }
 
-fn merge(sort: &Command, uniq: &Command) -> Option<Command> {
+fn unique_args(sort: &Command, uniq: &Command) -> Option<Vec<Word>> {
     if sort.name.value != "sort" || uniq.name.value != "uniq" || !uniq.args.is_empty() {
         return None;
     }
-    if !sort.redirects.is_empty() || crate::rules::reads_redirected_input(uniq) {
-        return None;
+    let flags = args::split(&sort.args, &SORT)?.flags;
+    let mut args = sort.args.clone();
+    if !flags.contains(&'u') {
+        args.insert(0, word("-u"));
     }
-    let args = args::split(&sort.args, &SORT)?;
-    let mut merged = sort.clone();
-    merged.redirects = uniq.redirects.clone();
-    if !args.flags.contains(&'u') {
-        let unique = Word {
-            raw: "-u".to_string(),
-            value: "-u".to_string(),
-        };
-        merged.args.insert(0, unique);
-    }
-    Some(merged)
+    Some(args)
 }
 
 #[cfg(test)]

@@ -13,12 +13,9 @@ pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
     let [grep, head] = pipeline.stages.as_slice() else {
         return None;
     };
-    if grep.name.value != "grep" || head.name.value != "head" || !grep.redirects.is_empty() {
-        return None;
-    }
-    if crate::rules::reads_redirected_input(head)
+    if grep.name.value != "grep"
+        || head.name.value != "head"
         || crate::rules::redirects_stderr(head)
-        || !crate::rules::only_harmless_redirects(pipeline)
     {
         return None;
     }
@@ -30,17 +27,8 @@ pub fn check(pipeline: &Pipeline) -> Option<Rewrite> {
     }
     let mut args = vec![word("-m"), word(lines)];
     args.extend_from_slice(&grep.args);
-    let merged = Command {
-        name: grep.name.clone(),
-        args,
-        redirects: head.redirects.clone(),
-    };
-    Some(Rewrite {
-        pipeline: Pipeline {
-            stages: vec![merged],
-        },
-        explanation: "grep -m stops after the first matching lines, no need for head.".to_string(),
-    })
+    let explanation = "grep -m stops after the first matching lines, no need for head.";
+    crate::rules::absorb(pipeline, 0, args, explanation)
 }
 
 // BSD grep treats `-m 0` as no limit and rejects counts that overflow, so N stays 1 to 9 digits.
