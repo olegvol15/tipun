@@ -149,6 +149,30 @@ fn rewrite_each_stage(
     })
 }
 
+// Replaces stages `i` and `i + 1` with one command that takes over the redirects of stage `i + 1`.
+fn absorb(pipeline: &Pipeline, i: usize, args: Vec<Word>, explanation: &str) -> Option<Rewrite> {
+    let [first, second] = pipeline.stages.get(i..=i + 1)? else {
+        return None;
+    };
+    if !first.redirects.is_empty()
+        || reads_redirected_input(second)
+        || !only_harmless_redirects(pipeline)
+    {
+        return None;
+    }
+    let merged = Command {
+        name: first.name.clone(),
+        args,
+        redirects: second.redirects.clone(),
+    };
+    let mut stages = pipeline.stages.clone();
+    stages.splice(i..=i + 1, [merged]);
+    Some(Rewrite {
+        pipeline: Pipeline { stages },
+        explanation: explanation.to_string(),
+    })
+}
+
 fn word(text: &str) -> Word {
     Word {
         raw: text.to_string(),
@@ -406,6 +430,65 @@ mod tests {
                 !only_harmless_redirects(&parse_str(input)),
                 "input: {input:?}"
             );
+        }
+    }
+
+    fn readme_examples() -> Vec<(String, String)> {
+        let mut examples = Vec::new();
+        for row in include_str!("../../README.md").lines() {
+            if !row.starts_with("| `") {
+                continue;
+            }
+            let cells: Vec<Vec<String>> = row
+                .replace("\\|", "\u{1}")
+                .split('|')
+                .map(|cell| {
+                    cell.split('`')
+                        .skip(1)
+                        .step_by(2)
+                        .map(|code| code.replace('\u{1}', "|"))
+                        .collect()
+                })
+                .collect();
+            let [_, typed, suggested, _] = cells.as_slice() else {
+                panic!("README row has two cells: {row}");
+            };
+            assert_eq!(typed.len(), suggested.len(), "README row: {row}");
+            examples.extend(typed.iter().cloned().zip(suggested.iter().cloned()));
+        }
+        examples
+    }
+
+    #[test]
+    fn readme_examples_get_their_suggestions() {
+        let examples = readme_examples();
+        assert!(examples.len() > 10, "README table not found");
+        for (typed, suggested) in examples {
+            let suggestion = rewrite(&parse_chain(&typed)).map(|s| render(&s.chain));
+            assert_eq!(suggestion.as_deref(), Some(suggested.as_str()), "{typed:?}");
+        }
+    }
+
+    #[test]
+    fn every_rule_has_a_readme_example() {
+        let examples = readme_examples();
+        let fires = |apply: &dyn Fn(&Chain) -> Option<Chain>| {
+            examples.iter().any(|(typed, suggested)| {
+                apply(&parse_chain(typed)).is_some_and(|chain| render(&chain) == *suggested)
+            })
+        };
+        for (i, rule) in CHAIN_RULES.iter().enumerate() {
+            let apply = |chain: &Chain| rule(chain, chain.pipelines.len()).map(|s| s.chain);
+            assert!(fires(&apply), "CHAIN_RULES[{i}] has no README example");
+        }
+        for (i, rule) in RULES.iter().chain(LAST_PIPELINE_RULES).enumerate() {
+            let apply = |chain: &Chain| match chain.pipelines.as_slice() {
+                [pipeline] => rule(pipeline).map(|rewrite| Chain {
+                    pipelines: vec![rewrite.pipeline],
+                }),
+                _ => None,
+            };
+            assert!(fires(&apply), "pipeline rule {i} has no README example");
         }
     }
 }
