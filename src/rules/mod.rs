@@ -31,6 +31,7 @@ const CHAIN_RULES: &[ChainRule] = &[
     merge_repeated::check,
     cd_parent::check,
     git::branch_switch::check,
+    git::stash_pop::check,
 ];
 
 const RULES: &[Rule] = &[git::stash::check, bundle_flags::check];
