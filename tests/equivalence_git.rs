@@ -67,6 +67,24 @@ fn git_stash_push_matches_stash_save() {
 }
 
 #[test]
+fn git_stash_pop_matches_apply_and_drop() {
+    let one = format!("{GIT_INIT} && echo changed >> app.log && git stash -q");
+    let two = format!("{one} && echo other >> case.txt && git stash -q");
+    let staged = format!("{GIT_INIT} && echo new > new.txt && git add new.txt && git stash -q");
+    let cases = [
+        (one.as_str(), "git stash apply && git stash drop"),
+        (one.as_str(), "git stash apply -q && git stash drop -q"),
+        (two.as_str(), "git stash apply 1 && git stash drop 1"),
+        (
+            two.as_str(),
+            "git stash apply && git stash drop && git stash list",
+        ),
+        (staged.as_str(), "git stash apply && git stash drop"),
+    ];
+    assert_same_git_state("git-stash-pop", &cases);
+}
+
+#[test]
 fn merged_git_commands_change_the_repository_the_same() {
     let new_files = format!("{GIT_INIT} && echo one > new1 && echo two > 'new 2'");
     let branches = format!("{GIT_INIT} && git branch a && git branch b");
@@ -379,4 +397,34 @@ fn reset_with_a_separator_is_not_unstaged_with_restore_before_the_first_commit()
     );
     fs::remove_dir_all(before).expect("remove fixture dir");
     fs::remove_dir_all(after).expect("remove fixture dir");
+}
+
+#[test]
+fn git_stash_pop_fails_on_a_conflict_like_apply() {
+    let setup = format!(
+        "{GIT_INIT} && echo stashed >> app.log && git stash -q && echo local >> app.log && git commit -qam local"
+    );
+    let original = "git stash apply && git stash drop && echo after";
+    let suggestion = suggest(original).expect("tipun must suggest a rewrite");
+    let mut results = Vec::new();
+    for (i, command) in [original, suggestion.as_str()].iter().enumerate() {
+        let dir = fixtures(&format!("git-stash-pop-conflict-{i}"));
+        assert_eq!(sh(&dir, &setup).status.code(), Some(0), "setup");
+        let output = sh(&dir, command);
+        let state = String::from_utf8_lossy(&sh(&dir, GIT_STATE).stdout).into_owned();
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        results.push((output.status.code(), state, stdout));
+        fs::remove_dir_all(dir).expect("remove fixture dir");
+    }
+    let [
+        (original_code, original_state, original_out),
+        (code, state, out),
+    ] = &results[..]
+    else {
+        unreachable!("two runs");
+    };
+    assert_eq!((code, state), (original_code, original_state));
+    assert_ne!(*original_code, Some(0));
+    let kept = "The stash entry is kept in case you need it again.\n";
+    assert_eq!(out.strip_suffix(kept), Some(original_out.as_str()));
 }

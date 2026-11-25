@@ -50,6 +50,7 @@ Early development, zsh and bash. tipun knows a small set of rewrites:
 | `mkdir a && mkdir a/b` | `mkdir -p a/b` |
 | `git branch x && git checkout x` | `git switch -c x` |
 | `git reset HEAD f` | `git restore --staged f` |
+| `git stash apply && git stash drop` | `git stash pop` |
 
 ## Install
 
